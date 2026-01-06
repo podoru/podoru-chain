@@ -114,7 +114,7 @@ func (n *Node) Start() error {
 
 	// Initialize syncer
 	n.logger.Info("Initializing syncer...")
-	n.syncer = network.NewSyncer(n.chain, n.p2pServer, n.logger)
+	n.syncer = network.NewSyncer(n.chain, n.p2pServer, n.mempool, n.logger)
 
 	// Start auto-sync to catch up with peers
 	n.logger.Info("Starting auto-sync...")
@@ -433,6 +433,9 @@ func (n *Node) SubmitTransaction(tx *blockchain.Transaction) error {
 		Payload: &network.NewTransactionMessage{Transaction: tx},
 	}
 	n.p2pServer.BroadcastMessage(msg)
+
+	// Broadcast transaction event via WebSocket
+	n.broadcastTransactionEvent(tx, "pending")
 
 	return nil
 }

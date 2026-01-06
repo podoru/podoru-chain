@@ -87,24 +87,31 @@ export default function Dashboard() {
         )}
 
         <div>
-          {events.map((event, index) => (
-            <div
-              key={index}
-              style={{
-                padding: '1rem',
-                borderLeft: event.type === 'new_block' ? '3px solid #48bb78' : '3px solid #ed8936',
-                backgroundColor: '#f7fafc',
-                marginBottom: '0.5rem',
-                borderRadius: '4px',
-              }}
-            >
-              {event.type === 'new_block' ? (
-                <BlockEventCard event={event.data as BlockEvent} timestamp={event.timestamp} />
-              ) : (
-                <TransactionEventCard event={event.data as TransactionEvent} timestamp={event.timestamp} />
-              )}
-            </div>
-          ))}
+          {events.map((event, index) => {
+            // Create stable key from event data
+            const key = event.type === 'new_block'
+              ? `block-${(event.data as BlockEvent).height}-${event.timestamp}`
+              : `tx-${(event.data as TransactionEvent).hash}-${event.timestamp}`
+
+            return (
+              <div
+                key={key}
+                style={{
+                  padding: '1rem',
+                  borderLeft: event.type === 'new_block' ? '3px solid #48bb78' : '3px solid #ed8936',
+                  backgroundColor: '#f7fafc',
+                  marginBottom: '0.5rem',
+                  borderRadius: '4px',
+                }}
+              >
+                {event.type === 'new_block' ? (
+                  <BlockEventCard event={event.data as BlockEvent} timestamp={event.timestamp} />
+                ) : (
+                  <TransactionEventCard event={event.data as TransactionEvent} timestamp={event.timestamp} />
+                )}
+              </div>
+            )
+          })}
         </div>
       </div>
 

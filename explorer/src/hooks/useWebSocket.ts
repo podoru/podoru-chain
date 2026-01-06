@@ -88,9 +88,35 @@ export function useWebSocket(subscriptions: EventType[] = []) {
       ws.onmessage = (event) => {
         try {
           const data: WebSocketEvent = JSON.parse(event.data)
-          console.log('Received WebSocket event:', data.type)
+          console.log('Received WebSocket event:', data.type, data)
           setLastEvent(data)
-          setEvents(prev => [data, ...prev].slice(0, 100)) // Keep last 100 events
+
+          // Deduplicate events by checking if the same event already exists
+          setEvents(prev => {
+            // Check if event already exists (same type, timestamp, and hash/height)
+            const isDuplicate = prev.some(e => {
+              if (e.type !== data.type || e.timestamp !== data.timestamp) return false
+
+              // For block events, check height
+              if (data.type === 'new_block' && 'height' in data.data && 'height' in e.data) {
+                return data.data.height === e.data.height
+              }
+
+              // For transaction events, check hash
+              if (data.type === 'new_transaction' && 'hash' in data.data && 'hash' in e.data) {
+                return data.data.hash === e.data.hash
+              }
+
+              return false
+            })
+
+            if (isDuplicate) {
+              console.log('Skipping duplicate event:', data.type)
+              return prev
+            }
+
+            return [data, ...prev].slice(0, 100) // Keep last 100 events
+          })
         } catch (err) {
           console.error('Failed to parse WebSocket message:', err, event.data)
         }

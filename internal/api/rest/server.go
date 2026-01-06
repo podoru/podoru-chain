@@ -81,6 +81,11 @@ func (s *Server) setupRoutes() {
 	// WebSocket endpoint
 	s.router.HandleFunc("/api/v1/ws", s.wsServer.HandleWebSocket)
 
+	// Handle all OPTIONS requests for CORS preflight
+	s.router.Methods("OPTIONS").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
 	// Add middlewares (order matters: CORS -> logging)
 	s.router.Use(s.corsMiddleware)
 	s.router.Use(s.loggingMiddleware)

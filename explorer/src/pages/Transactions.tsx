@@ -46,7 +46,7 @@ export default function Transactions() {
       <div className="card">
         <h2>📝 Mempool Transactions</h2>
         <p style={{ color: '#718096', marginBottom: '1.5rem' }}>
-          {mempool?.transaction_count || 0} pending transactions
+          {mempool?.count || 0} pending transactions
         </p>
 
         {!mempool?.transactions || mempool.transactions.length === 0 ? (

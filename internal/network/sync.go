@@ -14,13 +14,14 @@ import (
 type Syncer struct {
 	chain      *blockchain.Chain
 	p2pServer  *P2PServer
+	mempool    *Mempool
 	logger     *logrus.Logger
 	isSyncing  bool
 	syncPeriod time.Duration
 }
 
 // NewSyncer creates a new syncer
-func NewSyncer(chain *blockchain.Chain, p2pServer *P2PServer, logger *logrus.Logger) *Syncer {
+func NewSyncer(chain *blockchain.Chain, p2pServer *P2PServer, mempool *Mempool, logger *logrus.Logger) *Syncer {
 	if logger == nil {
 		logger = logrus.New()
 	}
@@ -28,6 +29,7 @@ func NewSyncer(chain *blockchain.Chain, p2pServer *P2PServer, logger *logrus.Log
 	return &Syncer{
 		chain:      chain,
 		p2pServer:  p2pServer,
+		mempool:    mempool,
 		logger:     logger,
 		syncPeriod: 30 * time.Second,
 	}
@@ -102,6 +104,9 @@ func (s *Syncer) SyncWithPeers() error {
 			if err := s.chain.AddBlock(block); err != nil {
 				return fmt.Errorf("failed to add block at height %d: %w", block.Header.Height, err)
 			}
+
+			// Remove synced transactions from mempool
+			s.mempool.RemoveTransactions(block.Transactions)
 		}
 
 		s.logger.Infof("Synced blocks %d to %d", height, toHeight)

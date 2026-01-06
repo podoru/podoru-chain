@@ -55,7 +55,7 @@ export interface Peer {
 }
 
 export interface MempoolInfo {
-  transaction_count: number
+  count: number
   transactions: Transaction[]
 }
 
@@ -85,7 +85,14 @@ class APIClient {
       throw new Error(`API Error: ${response.status} - ${error}`)
     }
 
-    return response.json()
+    const json = await response.json()
+
+    // Unwrap the {success: true, data: ...} response format
+    if (json.success && json.data !== undefined) {
+      return json.data as T
+    }
+
+    return json as T
   }
 
   // Chain endpoints
@@ -130,10 +137,25 @@ class APIClient {
   }
 
   async queryByPrefix(prefix: string): Promise<StateEntry[]> {
-    return this.fetch('/api/v1/state/query/prefix', {
+    const response = await this.fetch<{ prefix: string; count: number; results: { [key: string]: string } }>('/api/v1/state/query/prefix', {
       method: 'POST',
       body: JSON.stringify({ prefix }),
     })
+
+    // Convert the results object to an array of StateEntry
+    // Values are base64-encoded, so decode them
+    return Object.entries(response.results || {}).map(([key, value]) => ({
+      key,
+      value: this.decodeBase64(value),
+    }))
+  }
+
+  private decodeBase64(value: string): string {
+    try {
+      return atob(value)
+    } catch {
+      return value
+    }
   }
 
   // Node endpoints
