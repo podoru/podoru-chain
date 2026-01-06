@@ -53,6 +53,9 @@ Welcome to the Podoru Chain documentation! Podoru Chain is a fully decentralized
 - [Producer Nodes](configuration/producer.md) - Producer configuration
 - [Full Nodes](configuration/fullnode.md) - Full node configuration
 
+### Network Management
+- [Joining a Network](joining-network.md) - How others can join your blockchain network
+
 ### Help
 - [Troubleshooting](troubleshooting/README.md) - Common issues and solutions
 - [Contributing](contributing/README.md) - Contribution guidelines

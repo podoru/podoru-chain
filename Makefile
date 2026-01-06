@@ -1,4 +1,4 @@
-.PHONY: all build test clean clean-wizard docker docker-compose-up docker-compose-down keygen deps run setup-wizard
+.PHONY: all build test clean clean-wizard docker docker-compose-up docker-compose-down keygen deps run setup-wizard join-info
 
 # Build the node binary
 build:
@@ -124,12 +124,18 @@ clean-wizard:
 	@rm -f docker/docker-compose.yml 2>/dev/null || true
 	@echo "Wizard data cleaned! Run 'make setup-wizard' to start fresh."
 
+# Generate join information for others to connect to your network
+join-info:
+	@echo "Generating network join information..."
+	@bash scripts/generate-join-info.sh
+
 # Show help
 help:
 	@echo "Podoru Chain Makefile Commands:"
 	@echo ""
 	@echo "  make setup-wizard      - Run interactive setup wizard (recommended)"
 	@echo "  make clean-wizard      - Clean wizard-generated data and start fresh"
+	@echo "  make join-info         - Generate info for others to join your network"
 	@echo "  make build             - Build the node and keygen binaries"
 	@echo "  make test              - Run tests"
 	@echo "  make test-coverage     - Run tests with coverage report"
