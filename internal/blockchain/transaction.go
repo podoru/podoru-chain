@@ -185,3 +185,8 @@ func (tx *Transaction) Size() int {
 	}
 	return len(txBytes)
 }
+
+// HashString returns the transaction hash as a hex string with 0x prefix
+func (tx *Transaction) HashString() string {
+	return fmt.Sprintf("0x%x", tx.ID)
+}

@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Podoru Chain WebSocket Test</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .connected {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        #events {
+            border: 1px solid #ddd;
+            padding: 10px;
+            height: 400px;
+            overflow-y: auto;
+            background-color: #f5f5f5;
+        }
+        .event {
+            margin: 5px 0;
+            padding: 5px;
+            background-color: white;
+            border-left: 3px solid #007bff;
+        }
+        .event.new_block {
+            border-left-color: #28a745;
+        }
+        .event.new_transaction {
+            border-left-color: #ffc107;
+        }
+        button {
+            padding: 8px 15px;
+            margin: 5px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>Podoru Chain WebSocket Test</h1>
+
+    <div id="status" class="status disconnected">Disconnected</div>
+
+    <div>
+        <button onclick="connect()">Connect</button>
+        <button onclick="disconnect()">Disconnect</button>
+        <button onclick="subscribe(['new_block'])">Subscribe to Blocks</button>
+        <button onclick="subscribe(['new_transaction'])">Subscribe to Transactions</button>
+        <button onclick="subscribe(['new_block', 'new_transaction'])">Subscribe to All</button>
+        <button onclick="clearEvents()">Clear Events</button>
+    </div>
+
+    <h2>Events</h2>
+    <div id="events"></div>
+
+    <script>
+        let ws = null;
+        const statusEl = document.getElementById('status');
+        const eventsEl = document.getElementById('events');
+
+        function connect() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                log('Already connected');
+                return;
+            }
+
+            ws = new WebSocket('ws://localhost:8545/api/v1/ws');
+
+            ws.onopen = () => {
+                log('Connected to WebSocket');
+                statusEl.textContent = 'Connected';
+                statusEl.className = 'status connected';
+            };
+
+            ws.onclose = () => {
+                log('Disconnected from WebSocket');
+                statusEl.textContent = 'Disconnected';
+                statusEl.className = 'status disconnected';
+            };
+
+            ws.onerror = (error) => {
+                log('WebSocket error: ' + error);
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    displayEvent(data);
+                } catch (err) {
+                    log('Failed to parse message: ' + err);
+                }
+            };
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+        }
+
+        function subscribe(events) {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                log('Not connected');
+                return;
+            }
+
+            const msg = {
+                action: 'subscribe',
+                events: events
+            };
+
+            ws.send(JSON.stringify(msg));
+            log('Subscribed to: ' + events.join(', '));
+        }
+
+        function displayEvent(event) {
+            const div = document.createElement('div');
+            div.className = 'event ' + event.type;
+
+            const timestamp = new Date(event.timestamp * 1000).toLocaleTimeString();
+
+            let content = `[${timestamp}] ${event.type}: `;
+
+            if (event.type === 'new_block') {
+                content += `Height ${event.data.height}, Hash ${event.data.hash}, Txs: ${event.data.transaction_count}, Producer: ${event.data.producer}`;
+            } else if (event.type === 'new_transaction') {
+                content += `Hash ${event.data.hash}, From ${event.data.from}, Status: ${event.data.status}`;
+            } else {
+                content += JSON.stringify(event.data);
+            }
+
+            div.textContent = content;
+            eventsEl.insertBefore(div, eventsEl.firstChild);
+        }
+
+        function log(message) {
+            const div = document.createElement('div');
+            div.className = 'event';
+            div.textContent = '[' + new Date().toLocaleTimeString() + '] ' + message;
+            eventsEl.insertBefore(div, eventsEl.firstChild);
+        }
+
+        function clearEvents() {
+            eventsEl.innerHTML = '';
+        }
+
+        // Auto-connect on page load
+        connect();
+    </script>
+</body>
+</html>

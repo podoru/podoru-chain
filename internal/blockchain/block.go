@@ -158,3 +158,13 @@ func (b *Block) GetTransactionByHash(hash []byte) *Transaction {
 	}
 	return nil
 }
+
+// HashString returns the block hash as a hex string with 0x prefix
+func (b *Block) HashString() string {
+	return fmt.Sprintf("0x%x", b.Hash())
+}
+
+// PreviousHashString returns the previous block hash as a hex string with 0x prefix
+func (b *BlockHeader) PreviousHashString() string {
+	return fmt.Sprintf("0x%x", b.PreviousHash)
+}

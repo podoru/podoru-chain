@@ -35,6 +35,26 @@ services:
     depends_on:
       - producer1
 
+  explorer:
+    build:
+      context: ../explorer
+      dockerfile: Dockerfile
+    image: podoru-explorer:latest
+    container_name: podoru-explorer
+    hostname: explorer
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_URL=http://producer1:8545
+      - VITE_WS_URL=ws://producer1:8545/api/v1/ws
+      - NODE_ENV=production
+    networks:
+      podoru:
+        ipv4_address: 172.20.0.200
+    restart: unless-stopped
+    depends_on:
+      - producer1
+
 networks:
   podoru:
     driver: bridge

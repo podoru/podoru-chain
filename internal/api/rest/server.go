@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/podoru/podoru-chain/internal/api/websocket"
 	"github.com/podoru/podoru-chain/internal/node"
 	"github.com/sirupsen/logrus"
 )
@@ -16,6 +17,7 @@ type Server struct {
 	node       *node.Node
 	router     *mux.Router
 	httpServer *http.Server
+	wsServer   *websocket.Server
 	logger     *logrus.Logger
 }
 
@@ -26,9 +28,10 @@ func NewServer(n *node.Node, bindAddr string, port int, logger *logrus.Logger) *
 	}
 
 	server := &Server{
-		node:   n,
-		router: mux.NewRouter(),
-		logger: logger,
+		node:     n,
+		router:   mux.NewRouter(),
+		wsServer: websocket.NewServer(logger),
+		logger:   logger,
 	}
 
 	// Setup routes
@@ -43,6 +46,9 @@ func NewServer(n *node.Node, bindAddr string, port int, logger *logrus.Logger) *
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
+
+	// Connect WebSocket hub to node for event broadcasting
+	n.SetWebSocketHub(server.wsServer.GetHub())
 
 	return server
 }
@@ -72,13 +78,20 @@ func (s *Server) setupRoutes() {
 	// Mempool endpoints
 	s.router.HandleFunc("/api/v1/mempool", s.handleGetMempool).Methods("GET")
 
-	// Add logging middleware
+	// WebSocket endpoint
+	s.router.HandleFunc("/api/v1/ws", s.wsServer.HandleWebSocket)
+
+	// Add middlewares (order matters: CORS -> logging)
+	s.router.Use(s.corsMiddleware)
 	s.router.Use(s.loggingMiddleware)
 }
 
 // Start starts the API server
 func (s *Server) Start() error {
 	s.logger.Infof("Starting REST API server on %s", s.httpServer.Addr)
+
+	// Start WebSocket server
+	s.wsServer.Start()
 
 	go func() {
 		if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -93,6 +106,9 @@ func (s *Server) Start() error {
 func (s *Server) Stop() error {
 	s.logger.Info("Stopping REST API server...")
 
+	// Stop WebSocket server
+	s.wsServer.Stop()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -102,6 +118,25 @@ func (s *Server) Stop() error {
 
 	s.logger.Info("REST API server stopped")
 	return nil
+}
+
+// corsMiddleware adds CORS headers to allow browser access
+func (s *Server) corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Allow all origins in development (restrict in production)
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Upgrade, Connection, Sec-WebSocket-Key, Sec-WebSocket-Version, Sec-WebSocket-Protocol")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+
+		// Handle preflight requests
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }
 
 // loggingMiddleware logs HTTP requests

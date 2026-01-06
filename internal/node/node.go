@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/podoru/podoru-chain/internal/api/websocket"
 	"github.com/podoru/podoru-chain/internal/blockchain"
 	"github.com/podoru/podoru-chain/internal/consensus"
 	"github.com/podoru/podoru-chain/internal/crypto"
@@ -25,6 +26,7 @@ type Node struct {
 	mempool    *network.Mempool
 	syncer     *network.Syncer
 	privateKey *ecdsa.PrivateKey
+	wsHub      *websocket.Hub
 	stopChan   chan struct{}
 }
 
@@ -210,6 +212,10 @@ func (n *Node) handleNewBlock(peer *network.Peer, msg *network.Message) error {
 		}
 		n.logger.Infof("Added block %d from peer (txs: %d)", block.Header.Height, len(block.Transactions))
 		n.mempool.RemoveTransactions(block.Transactions)
+
+		// Broadcast block event via WebSocket
+		n.broadcastBlockEvent(block)
+
 		return nil
 	}
 
@@ -254,6 +260,9 @@ func (n *Node) handleNewTransaction(peer *network.Peer, msg *network.Message) er
 	}
 
 	n.logger.Infof("Added transaction %x to mempool", tx.ID)
+
+	// Broadcast transaction event via WebSocket
+	n.broadcastTransactionEvent(tx, "pending")
 
 	return nil
 }
@@ -398,6 +407,9 @@ func (n *Node) produceBlock() error {
 	}
 	n.p2pServer.BroadcastMessage(msg)
 
+	// Broadcast block event via WebSocket
+	n.broadcastBlockEvent(block)
+
 	n.logger.Infof("Block %d produced successfully (txs: %d)", nextHeight, len(transactions))
 
 	return nil
@@ -438,6 +450,27 @@ func (n *Node) GetMempool() *network.Mempool {
 // GetP2PServer returns the P2P server
 func (n *Node) GetP2PServer() *network.P2PServer {
 	return n.p2pServer
+}
+
+// SetWebSocketHub sets the WebSocket hub for broadcasting events
+func (n *Node) SetWebSocketHub(hub *websocket.Hub) {
+	n.wsHub = hub
+}
+
+// broadcastBlockEvent broadcasts a new block event via WebSocket
+func (n *Node) broadcastBlockEvent(block *blockchain.Block) {
+	if n.wsHub != nil {
+		event := websocket.NewBlockEvent(block)
+		n.wsHub.Broadcast(event)
+	}
+}
+
+// broadcastTransactionEvent broadcasts a new transaction event via WebSocket
+func (n *Node) broadcastTransactionEvent(tx *blockchain.Transaction, status string) {
+	if n.wsHub != nil {
+		event := websocket.NewTransactionEvent(tx, status)
+		n.wsHub.Broadcast(event)
+	}
 }
 
 // Stop stops the node

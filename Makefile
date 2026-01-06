@@ -1,4 +1,4 @@
-.PHONY: all build test clean clean-wizard docker docker-compose-up docker-compose-down keygen deps run setup-wizard join-info join-wizard update-node
+.PHONY: all build test clean clean-wizard docker docker-compose-up docker-compose-down keygen deps run setup-wizard join-info join-wizard update-node explorer-build explorer-dev explorer-docker stack-up stack-down stack-logs
 
 # Build the node binary
 build:
@@ -139,11 +139,62 @@ update-node:
 	@echo "Updating Podoru Chain node..."
 	@bash scripts/update-node.sh
 
+# Build explorer
+explorer-build:
+	@echo "Building explorer..."
+	@cd explorer && npm install && npm run build
+	@echo "Explorer built!"
+
+# Run explorer in dev mode
+explorer-dev:
+	@echo "Starting explorer in development mode..."
+	@cd explorer && npm run dev
+
+# Build explorer Docker image
+explorer-docker:
+	@echo "Building explorer Docker image..."
+	@docker build -t podoru-explorer:latest -f explorer/Dockerfile explorer/
+	@echo "Explorer Docker image built!"
+
+# Start full stack (nodes + explorer)
+stack-up: docker
+	@echo "Starting full stack (nodes + explorer)..."
+	@cd docker && docker-compose up -d
+	@echo "Stack started!"
+	@echo ""
+	@echo "Access points:"
+	@echo "  Explorer:     http://localhost:3000"
+	@echo "  Producer API: http://localhost:8545"
+	@echo "  Fullnode API: http://localhost:8546"
+	@echo ""
+	@echo "View logs with: make stack-logs"
+
+# Stop full stack
+stack-down:
+	@echo "Stopping full stack..."
+	@cd docker && docker-compose down
+	@echo "Stack stopped!"
+
+# View stack logs
+stack-logs:
+	@cd docker && docker-compose logs -f
+
 # Show help
 help:
 	@echo "Podoru Chain Makefile Commands:"
 	@echo ""
+	@echo "Quick Start:"
 	@echo "  make setup-wizard      - Run interactive setup wizard (recommended)"
+	@echo "  make stack-up          - Start full stack (nodes + explorer)"
+	@echo "  make stack-down        - Stop full stack"
+	@echo "  make stack-logs        - View all logs"
+	@echo ""
+	@echo "Explorer:"
+	@echo "  make explorer-build    - Build explorer (npm install & build)"
+	@echo "  make explorer-dev      - Run explorer in development mode"
+	@echo "  make explorer-docker   - Build explorer Docker image"
+	@echo ""
+	@echo "Node Operations:"
 	@echo "  make clean-wizard      - Clean wizard-generated data and start fresh"
 	@echo "  make join-info         - Generate info for others to join your network"
 	@echo "  make join-wizard       - Join an existing network with a tarball"
@@ -153,12 +204,16 @@ help:
 	@echo "  make test-coverage     - Run tests with coverage report"
 	@echo "  make clean             - Clean build artifacts"
 	@echo "  make deps              - Install dependencies"
+	@echo ""
+	@echo "Docker:"
 	@echo "  make docker            - Build Docker image"
 	@echo "  make setup-docker      - Setup Docker data directories"
 	@echo "  make keygen-all        - Generate keys for all producers"
 	@echo "  make docker-compose-up - Start multi-node network"
 	@echo "  make docker-compose-down - Stop multi-node network"
 	@echo "  make docker-compose-logs - View network logs"
+	@echo ""
+	@echo "Development:"
 	@echo "  make run CONFIG=<path> - Run a single node locally"
 	@echo "  make fmt               - Format code"
 	@echo "  make lint              - Run linter"
