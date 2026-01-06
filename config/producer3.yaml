@@ -1,0 +1,29 @@
+node_type: producer
+address: "0x304F73DD4CabF754eF2240fF2bC2446eB7709652"
+private_key: "/data/keys/producer3.key"
+
+# Network configuration
+p2p_port: 9000
+p2p_bind_addr: "0.0.0.0"
+bootstrap_peers:
+  - "172.20.0.10:9000"
+  - "172.20.0.11:9000"
+max_peers: 50
+
+# API configuration
+api_enabled: true
+api_port: 8545
+api_bind_addr: "0.0.0.0"
+
+# Storage configuration
+data_dir: "/data"
+
+# Consensus configuration
+authorities:
+  - "0x3D4b25CBdda1014F74F9C80f040ce1Bb69130CBB"
+  - "0x4aa37EEc2a26a4e04b7b206f32D6C2C63219F5cd"
+  - "0x304F73DD4CabF754eF2240fF2bC2446eB7709652"
+block_time: 5s
+
+# Genesis configuration
+genesis_path: "/data/genesis.json"

@@ -1,0 +1,23 @@
+# Ignore data directories
+docker/data/
+
+# Ignore build artifacts
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Ignore test coverage
+*.out
+*.html
+
+# Ignore IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Ignore git
+.git/
+.gitignore

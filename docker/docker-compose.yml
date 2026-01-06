@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  # Producer Node 1
+  producer1:
+    image: podoru-chain:latest
+    container_name: podoru-producer1
+    hostname: producer1
+    ports:
+      - "8545:8545"  # API
+      - "9000:9000"  # P2P
+    volumes:
+      - ./data/producer1:/data
+    environment:
+      - NODE_TYPE=producer
+    networks:
+      podoru:
+        ipv4_address: 172.20.0.10
+    restart: unless-stopped
+
+  # Producer Node 2
+  producer2:
+    image: podoru-chain:latest
+    container_name: podoru-producer2
+    hostname: producer2
+    ports:
+      - "8546:8545"  # API
+      - "9001:9000"  # P2P
+    volumes:
+      - ./data/producer2:/data
+    environment:
+      - NODE_TYPE=producer
+    networks:
+      podoru:
+        ipv4_address: 172.20.0.11
+    restart: unless-stopped
+    depends_on:
+      - producer1
+
+  # Producer Node 3
+  producer3:
+    image: podoru-chain:latest
+    container_name: podoru-producer3
+    hostname: producer3
+    ports:
+      - "8547:8545"  # API
+      - "9002:9000"  # P2P
+    volumes:
+      - ./data/producer3:/data
+    environment:
+      - NODE_TYPE=producer
+    networks:
+      podoru:
+        ipv4_address: 172.20.0.12
+    restart: unless-stopped
+    depends_on:
+      - producer1
+
+  # Full Node 1
+  fullnode1:
+    image: podoru-chain:latest
+    container_name: podoru-fullnode1
+    hostname: fullnode1
+    ports:
+      - "8548:8545"  # API
+      - "9003:9000"  # P2P
+    volumes:
+      - ./data/fullnode1:/data
+    environment:
+      - NODE_TYPE=full
+    networks:
+      podoru:
+        ipv4_address: 172.20.0.20
+    restart: unless-stopped
+    depends_on:
+      - producer1
+      - producer2
+      - producer3
+
+networks:
+  podoru:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

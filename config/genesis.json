@@ -1,0 +1,14 @@
+{
+  "timestamp": 1704556800,
+  "authorities": [
+    "0xF891dA4c1309Ff4eCC25bc46a858260d13AB4a49",
+    "0x81ed8586Dc0aE142dA3d5C4D45A8C8adB59CDC38",
+    "0xffBCafC6a236CE665eB079fBd599a23977E7C5b1"
+  ],
+  "initial_state": {
+    "chain:name": "Podoru Chain",
+    "chain:version": "1.0.0",
+    "chain:description": "Decentralized blockchain for storing any data",
+    "system:initialized": "true"
+  }
+}

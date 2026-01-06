@@ -1,0 +1,27 @@
+{
+  "title": "Podoru Chain Documentation",
+  "description": "A fully decentralized blockchain platform for storing arbitrary data",
+  "author": "Podoru Chain Team",
+  "language": "en",
+  "gitbook": "3.2.3",
+  "root": "./docs",
+  "structure": {
+    "readme": "README.md",
+    "summary": "SUMMARY.md"
+  },
+  "plugins": [
+    "theme-default",
+    "search",
+    "-sharing"
+  ],
+  "pluginsConfig": {
+    "theme-default": {
+      "showLevel": true
+    }
+  },
+  "links": {
+    "sidebar": {
+      "GitHub": "https://github.com/podoru/podoru-chain"
+    }
+  }
+}

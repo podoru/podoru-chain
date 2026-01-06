@@ -1,0 +1,14 @@
+{
+  "name": "podoru-chain-docs",
+  "version": "1.0.0",
+  "description": "Documentation for Podoru Chain blockchain platform",
+  "scripts": {
+    "docs:build": "honkit build",
+    "docs:serve": "honkit serve"
+  },
+  "devDependencies": {
+    "honkit": "^6.1.4"
+  },
+  "author": "Podoru Chain Team",
+  "license": "MIT"
+}

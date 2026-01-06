@@ -1,0 +1,57 @@
+# Binaries
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+coverage.html
+
+# Dependency directories
+vendor/
+
+# Go workspace file
+go.work
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Data directories
+data/
+docker/data/
+*.db
+
+# Private keys
+*.key
+!.gitkeep
+
+# Logs
+*.log
+
+# Temporary files
+tmp/
+temp/
+
+# HonKit build output
+_book/
+*.epub
+*.mobi
+*.pdf
+
+# Node modules
+node_modules/
+package-lock.json
