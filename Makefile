@@ -1,4 +1,4 @@
-.PHONY: all build test clean clean-wizard docker docker-compose-up docker-compose-down keygen deps run setup-wizard join-info join-wizard
+.PHONY: all build test clean clean-wizard docker docker-compose-up docker-compose-down keygen deps run setup-wizard join-info join-wizard update-node
 
 # Build the node binary
 build:
@@ -134,6 +134,11 @@ join-wizard:
 	@echo "Starting Podoru Chain Join Wizard..."
 	@bash scripts/join-wizard.sh
 
+# Update existing node with latest code from git
+update-node:
+	@echo "Updating Podoru Chain node..."
+	@bash scripts/update-node.sh
+
 # Show help
 help:
 	@echo "Podoru Chain Makefile Commands:"
@@ -142,6 +147,7 @@ help:
 	@echo "  make clean-wizard      - Clean wizard-generated data and start fresh"
 	@echo "  make join-info         - Generate info for others to join your network"
 	@echo "  make join-wizard       - Join an existing network with a tarball"
+	@echo "  make update-node       - Pull latest code and update running node"
 	@echo "  make build             - Build the node and keygen binaries"
 	@echo "  make test              - Run tests"
 	@echo "  make test-coverage     - Run tests with coverage report"
