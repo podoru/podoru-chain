@@ -52,7 +52,8 @@ generate_authorities_json() {
     local result="["
     local first=true
 
-    echo "$addresses" | while IFS= read -r addr; do
+    # Use process substitution instead of pipe to avoid subshell
+    while IFS= read -r addr; do
         if [ -n "$addr" ]; then
             if [ "$first" = true ]; then
                 result="${result}\n    \"${addr}\""
@@ -61,7 +62,7 @@ generate_authorities_json() {
                 result="${result},\n    \"${addr}\""
             fi
         fi
-    done
+    done <<< "$addresses"
 
     result="${result}\n  ]"
     echo -e "$result"
