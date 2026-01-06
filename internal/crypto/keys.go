@@ -2,8 +2,6 @@ package crypto
 
 import (
 	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -12,9 +10,9 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
-// GenerateKeyPair generates a new ECDSA key pair
+// GenerateKeyPair generates a new ECDSA key pair using secp256k1 curve
 func GenerateKeyPair() (*ecdsa.PrivateKey, error) {
-	return ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	return crypto.GenerateKey()
 }
 
 // PrivateKeyToBytes converts a private key to bytes

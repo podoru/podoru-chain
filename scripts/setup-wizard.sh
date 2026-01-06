@@ -292,8 +292,20 @@ check_and_handle_existing_setup() {
         case $? in
             0)  # Yes - clean
                 log_info "Cleaning existing setup..."
+
+                # Try normal rm first
                 rm -rf docker/data/producer* docker/data/fullnode* 2>/dev/null
                 rm -f docker/docker-compose.yml 2>/dev/null
+
+                # Check if there are still directories (likely owned by root from Docker)
+                if ls docker/data/producer* docker/data/fullnode* >/dev/null 2>&1; then
+                    log_warning "Some files require elevated privileges to remove"
+                    sudo rm -rf docker/data/producer* docker/data/fullnode* 2>/dev/null || {
+                        log_error "Failed to clean existing setup. Please run: sudo rm -rf docker/data/producer* docker/data/fullnode*"
+                        return 1
+                    }
+                fi
+
                 log_success "Existing setup cleaned"
                 return 0
                 ;;
