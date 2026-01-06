@@ -1,9 +1,9 @@
 #!/bin/bash
 # Configuration file generator for Podoru Chain Setup Wizard
 
-# Source utils for logging
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/utils.sh"
+# Source utils for logging (assuming it's already loaded or in same directory)
+LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+[ -f "$LIB_DIR/utils.sh" ] && source "$LIB_DIR/utils.sh" || true
 
 # Generate bootstrap peers for a producer node
 # Args: node_num, total_producers

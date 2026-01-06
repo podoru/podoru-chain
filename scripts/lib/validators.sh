@@ -1,9 +1,9 @@
 #!/bin/bash
 # Validation functions for Podoru Chain Setup Wizard
 
-# Source utils for logging
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/utils.sh"
+# Source utils for logging (assuming it's already loaded or in same directory)
+LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+[ -f "$LIB_DIR/utils.sh" ] && source "$LIB_DIR/utils.sh" || true
 
 # Validate node count
 validate_node_count() {
