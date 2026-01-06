@@ -1,4 +1,4 @@
-.PHONY: all build test clean docker docker-compose-up docker-compose-down keygen deps run
+.PHONY: all build test clean clean-wizard docker docker-compose-up docker-compose-down keygen deps run setup-wizard
 
 # Build the node binary
 build:
@@ -116,11 +116,20 @@ setup-wizard:
 	@echo "Starting Podoru Chain Setup Wizard..."
 	@bash scripts/setup-wizard.sh
 
+# Clean wizard-generated data (requires sudo for Docker-created files)
+clean-wizard:
+	@echo "Cleaning wizard-generated data..."
+	@cd docker && docker-compose down 2>/dev/null || true
+	@sudo rm -rf docker/data/producer* docker/data/fullnode* docker/data/genesis.json 2>/dev/null || true
+	@rm -f docker/docker-compose.yml 2>/dev/null || true
+	@echo "Wizard data cleaned! Run 'make setup-wizard' to start fresh."
+
 # Show help
 help:
 	@echo "Podoru Chain Makefile Commands:"
 	@echo ""
 	@echo "  make setup-wizard      - Run interactive setup wizard (recommended)"
+	@echo "  make clean-wizard      - Clean wizard-generated data and start fresh"
 	@echo "  make build             - Build the node and keygen binaries"
 	@echo "  make test              - Run tests"
 	@echo "  make test-coverage     - Run tests with coverage report"
