@@ -357,6 +357,24 @@ func (c *Chain) GetStateRoot() []byte {
 	return c.state.CalculateRoot()
 }
 
+// CalculateStateRootWithTransactions calculates what the state root will be
+// after applying the given transactions, without modifying the actual state
+func (c *Chain) CalculateStateRootWithTransactions(transactions []*Transaction) ([]byte, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	// Clone current state
+	tempState := c.state.Clone()
+
+	// Apply transactions to temporary state
+	if err := c.applyTransactionsToState(tempState, transactions); err != nil {
+		return nil, err
+	}
+
+	// Calculate and return the root
+	return tempState.CalculateRoot(), nil
+}
+
 // QueryStateByPrefix queries all state keys with a given prefix
 func (c *Chain) QueryStateByPrefix(prefix string, limit int) (map[string][]byte, error) {
 	return c.storage.ScanStateByPrefix(prefix, limit)

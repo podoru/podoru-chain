@@ -1,6 +1,6 @@
 # Simple Podoru Chain App Example
 
-This is a basic example showing how to query data from Podoru Chain.
+This is a complete example showing how to **read and write** data on Podoru Chain.
 
 ## Prerequisites
 
@@ -14,8 +14,9 @@ This is a basic example showing how to query data from Podoru Chain.
 cd ../..
 make docker-compose-up
 
-# Wait for blockchain to start, then run the example
+# Wait for blockchain to start, then install dependencies and run
 cd examples/simple-app
+npm install
 node app.js
 ```
 
@@ -23,10 +24,17 @@ node app.js
 
 This example demonstrates:
 
+### Reading Data
 1. **Chain Info Query** - Get blockchain metadata
 2. **Single Key Query** - Get one value
 3. **Batch Query** - Get multiple keys at once
 4. **Prefix Query** - Get all keys matching a pattern
+
+### Writing Data
+5. **Create Transactions** - Submit signed transactions to the blockchain
+6. **Set Key-Value Pairs** - Store data on-chain
+7. **Batch Operations** - Multiple operations in one transaction
+8. **User Profiles** - Create and update user data
 
 ## Sample Output
 
@@ -57,6 +65,8 @@ description: Decentralized blockchain for storing any data
 
 Use this as a starting point! Key functions:
 
+### Reading Data
+
 ```javascript
 // Get single value
 const name = await get('chain:name');
@@ -70,5 +80,50 @@ const userData = await queryPrefix('user:alice:');
 // Get blockchain info
 const info = await getChainInfo();
 ```
+
+### Writing Data
+
+```javascript
+// Set a single key-value pair
+await set('myapp:setting', 'enabled');
+
+// Set multiple key-value pairs in one transaction
+await setBatch({
+  'user:bob:name': 'Bob Smith',
+  'user:bob:email': 'bob@example.com'
+});
+
+// Delete a key
+await del('myapp:temp');
+
+// Create a user profile (helper function)
+await createUserProfile('alice', {
+  name: 'Alice Johnson',
+  email: 'alice@example.com',
+  bio: 'Blockchain enthusiast'
+});
+
+// Update a single field
+await updateUserField('alice', 'bio', 'Podoru Chain developer');
+```
+
+### Advanced: Direct Transaction Submission
+
+```javascript
+// Submit a custom transaction with multiple operations
+await submitTransaction([
+  { type: 'SET', key: 'app:counter', value: '42' },
+  { type: 'SET', key: 'app:status', value: 'active' },
+  { type: 'DELETE', key: 'app:old_data' }
+]);
+```
+
+## How It Works
+
+1. **Transaction Signing**: The app generates a random Ethereum-compatible wallet for testing
+2. **Transaction Format**: Transactions are JSON objects with operations (SET/DELETE)
+3. **Signature**: Uses secp256k1 ECDSA signatures (same as Ethereum)
+4. **Submission**: POSTs signed transactions to `/api/v1/transaction`
+5. **Block Production**: Transactions are included in the next block (3 second intervals)
 
 See [docs/APP_DEVELOPMENT.md](../../docs/APP_DEVELOPMENT.md) for complete guide.

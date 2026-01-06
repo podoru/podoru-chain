@@ -357,6 +357,12 @@ func (n *Node) produceBlock() error {
 	// Calculate merkle root
 	merkleRoot := blockchain.CalculateMerkleRoot(transactions)
 
+	// Calculate state root AFTER applying transactions
+	stateRoot, err := n.chain.CalculateStateRootWithTransactions(transactions)
+	if err != nil {
+		return fmt.Errorf("failed to calculate state root: %w", err)
+	}
+
 	// Create block header
 	header := &blockchain.BlockHeader{
 		Version:      1,
@@ -364,7 +370,7 @@ func (n *Node) produceBlock() error {
 		PreviousHash: currentBlock.Hash(),
 		Timestamp:    time.Now().Unix(),
 		MerkleRoot:   merkleRoot,
-		StateRoot:    n.chain.GetStateRoot(),
+		StateRoot:    stateRoot,
 		ProducerAddr: n.config.Address,
 		Nonce:        0,
 	}

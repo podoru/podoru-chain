@@ -1,0 +1,15 @@
+{
+  "name": "podoru-chain-simple-app",
+  "version": "1.0.0",
+  "description": "Simple example app for Podoru Chain",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js"
+  },
+  "keywords": ["blockchain", "podoru-chain"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "ethers": "^6.9.0"
+  }
+}
