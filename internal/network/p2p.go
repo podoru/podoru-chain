@@ -34,6 +34,10 @@ type P2PServer struct {
 	logger          *logrus.Logger
 	stopChan        chan struct{}
 	wg              sync.WaitGroup
+
+	// Response handling for synchronous request-response pattern
+	responseChans map[MessageType]chan *Message
+	responseMu    sync.Mutex
 }
 
 // MessageHandler is a function that handles incoming messages
@@ -52,6 +56,7 @@ func NewP2PServer(bindAddr string, port int, logger *logrus.Logger) *P2PServer {
 		messageHandlers: make(map[MessageType]MessageHandler),
 		logger:          logger,
 		stopChan:        make(chan struct{}),
+		responseChans:   make(map[MessageType]chan *Message),
 	}
 }
 
@@ -218,8 +223,53 @@ func (p2p *P2PServer) BroadcastMessage(msg *Message) {
 	}
 }
 
+// SendAndWaitForResponse sends a message and waits for a response of the specified type
+func (p2p *P2PServer) SendAndWaitForResponse(peer *Peer, msg *Message, responseType MessageType, timeout time.Duration) (*Message, error) {
+	// Create response channel
+	responseChan := make(chan *Message, 1)
+
+	// Register channel for response type
+	p2p.responseMu.Lock()
+	p2p.responseChans[responseType] = responseChan
+	p2p.responseMu.Unlock()
+
+	// Ensure cleanup
+	defer func() {
+		p2p.responseMu.Lock()
+		delete(p2p.responseChans, responseType)
+		p2p.responseMu.Unlock()
+	}()
+
+	// Send the request
+	if err := p2p.SendMessage(peer, msg); err != nil {
+		return nil, err
+	}
+
+	// Wait for response with timeout
+	select {
+	case response := <-responseChan:
+		return response, nil
+	case <-time.After(timeout):
+		return nil, errors.New("request timeout")
+	}
+}
+
 // handleMessage handles an incoming message
 func (p2p *P2PServer) handleMessage(peer *Peer, msg *Message) error {
+	// Check if this is a response we're waiting for
+	p2p.responseMu.Lock()
+	if ch, ok := p2p.responseChans[msg.Type]; ok {
+		select {
+		case ch <- msg:
+		default:
+			// Channel full, skip
+		}
+		p2p.responseMu.Unlock()
+		return nil
+	}
+	p2p.responseMu.Unlock()
+
+	// Otherwise dispatch to handler
 	p2p.mu.RLock()
 	handler, exists := p2p.messageHandlers[msg.Type]
 	p2p.mu.RUnlock()

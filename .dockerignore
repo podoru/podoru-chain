@@ -1,5 +1,6 @@
 # Ignore data directories
 docker/data/
+podoru-fullnode/
 
 # Ignore build artifacts
 bin/

@@ -114,6 +114,10 @@ func (n *Node) Start() error {
 	n.logger.Info("Initializing syncer...")
 	n.syncer = network.NewSyncer(n.chain, n.p2pServer, n.logger)
 
+	// Start auto-sync to catch up with peers
+	n.logger.Info("Starting auto-sync...")
+	n.syncer.StartAutoSync()
+
 	// Start block production if this is a producer node
 	if n.config.IsProducer() {
 		n.logger.Info("Starting block production...")
@@ -161,6 +165,9 @@ func (n *Node) registerP2PHandlers() {
 	// Handle get blocks messages
 	n.p2pServer.RegisterHandler(network.MsgTypeGetBlocks, n.handleGetBlocks)
 
+	// Handle get height messages
+	n.p2pServer.RegisterHandler(network.MsgTypeGetHeight, n.handleGetHeight)
+
 	// Handle ping messages
 	n.p2pServer.RegisterHandler(network.MsgTypePing, n.handlePing)
 }
@@ -184,23 +191,39 @@ func (n *Node) handleNewBlock(peer *network.Peer, msg *network.Message) error {
 		return fmt.Errorf("block is nil")
 	}
 
-	// Check if we already have this block
 	currentBlock := n.chain.GetCurrentBlock()
-	if block.Header.Height <= currentBlock.Header.Height {
-		n.logger.Debugf("Ignoring block at height %d (current: %d)", block.Header.Height, currentBlock.Header.Height)
+	currentHeight := currentBlock.Header.Height
+
+	// Check if block is already processed (stale)
+	if block.Header.Height <= currentHeight {
+		n.logger.Debugf("Ignoring block at height %d (current: %d)", block.Header.Height, currentHeight)
 		return nil
 	}
 
-	// Add block to chain (this will validate it)
-	if err := n.chain.AddBlock(block); err != nil {
-		n.logger.Errorf("Failed to add received block: %v", err)
-		return err
+	// Check if block is the NEXT expected block
+	expectedHeight := currentHeight + 1
+	if block.Header.Height == expectedHeight {
+		// This is the next block - add it normally
+		if err := n.chain.AddBlock(block); err != nil {
+			n.logger.Errorf("Failed to add received block: %v", err)
+			return err
+		}
+		n.logger.Infof("Added block %d from peer (txs: %d)", block.Header.Height, len(block.Transactions))
+		n.mempool.RemoveTransactions(block.Transactions)
+		return nil
 	}
 
-	n.logger.Infof("Added block %d from peer (txs: %d)", block.Header.Height, len(block.Transactions))
+	// Block is too far ahead - trigger sync instead of rejecting
+	if block.Header.Height > expectedHeight {
+		n.logger.Warnf("Block %d is ahead of current height %d, triggering sync...",
+			block.Header.Height, currentHeight)
 
-	// Remove transactions from mempool if they were included in this block
-	n.mempool.RemoveTransactions(block.Transactions)
+		// Trigger sync in background (non-blocking)
+		n.syncer.TriggerSync()
+
+		// Don't return error - this is expected behavior for catching up
+		return nil
+	}
 
 	return nil
 }
@@ -238,7 +261,50 @@ func (n *Node) handleNewTransaction(peer *network.Peer, msg *network.Message) er
 // handleGetBlocks handles get blocks requests
 func (n *Node) handleGetBlocks(peer *network.Peer, msg *network.Message) error {
 	n.logger.Info("Received get blocks request from peer")
-	return nil
+
+	// Parse request
+	payloadBytes, err := json.Marshal(msg.Payload)
+	if err != nil {
+		return err
+	}
+
+	var req network.GetBlocksMessage
+	if err := json.Unmarshal(payloadBytes, &req); err != nil {
+		return err
+	}
+
+	// Retrieve blocks
+	blocks := make([]*blockchain.Block, 0, req.ToHeight-req.FromHeight+1)
+	for h := req.FromHeight; h <= req.ToHeight; h++ {
+		block, err := n.chain.GetBlockByHeight(h)
+		if err != nil {
+			break // No more blocks
+		}
+		blocks = append(blocks, block)
+	}
+
+	n.logger.Infof("Sending %d blocks (height %d to %d) to peer %s", len(blocks), req.FromHeight, req.ToHeight, peer.ID)
+
+	// Send response
+	response := &network.Message{
+		Type:    network.MsgTypeBlocks,
+		Payload: &network.BlocksMessage{Blocks: blocks},
+	}
+
+	return n.p2pServer.SendMessage(peer, response)
+}
+
+// handleGetHeight handles get height requests
+func (n *Node) handleGetHeight(peer *network.Peer, msg *network.Message) error {
+	height := n.chain.GetHeight()
+
+	response := &network.Message{
+		Type:    network.MsgTypeHeight,
+		Payload: &network.HeightMessage{Height: height},
+	}
+
+	n.logger.Debugf("Responding to height request from %s: height=%d", peer.ID, height)
+	return n.p2pServer.SendMessage(peer, response)
 }
 
 // handlePing handles ping messages

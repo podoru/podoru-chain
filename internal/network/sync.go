@@ -113,46 +113,57 @@ func (s *Syncer) SyncWithPeers() error {
 
 // getPeerHeight requests the current height from a peer
 func (s *Syncer) getPeerHeight(peer *Peer) (uint64, error) {
-	// Send GetHeight message
 	msg := &Message{
 		Type:    MsgTypeGetHeight,
 		Payload: &GetHeightMessage{},
 	}
 
-	if err := s.p2pServer.SendMessage(peer, msg); err != nil {
+	response, err := s.p2pServer.SendAndWaitForResponse(peer, msg, MsgTypeHeight, 10*time.Second)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get peer height: %w", err)
+	}
+
+	// Parse response
+	payloadBytes, err := json.Marshal(response.Payload)
+	if err != nil {
 		return 0, err
 	}
 
-	// Wait for response (simplified - in production, use channels)
-	// This is a placeholder - proper implementation would need async message handling
-	return 0, errors.New("not implemented - requires async message handling")
+	var heightMsg HeightMessage
+	if err := json.Unmarshal(payloadBytes, &heightMsg); err != nil {
+		return 0, err
+	}
+
+	return heightMsg.Height, nil
 }
 
 // requestBlocks requests blocks from a peer
 func (s *Syncer) requestBlocks(peer *Peer, fromHeight, toHeight uint64) ([]*blockchain.Block, error) {
-	// Send GetBlocks message
-	payload := &GetBlocksMessage{
-		FromHeight: fromHeight,
-		ToHeight:   toHeight,
+	msg := &Message{
+		Type: MsgTypeGetBlocks,
+		Payload: &GetBlocksMessage{
+			FromHeight: fromHeight,
+			ToHeight:   toHeight,
+		},
 	}
 
-	payloadBytes, err := json.Marshal(payload)
+	response, err := s.p2pServer.SendAndWaitForResponse(peer, msg, MsgTypeBlocks, 30*time.Second)
+	if err != nil {
+		return nil, fmt.Errorf("failed to request blocks: %w", err)
+	}
+
+	// Parse response
+	payloadBytes, err := json.Marshal(response.Payload)
 	if err != nil {
 		return nil, err
 	}
 
-	msg := &Message{
-		Type:    MsgTypeGetBlocks,
-		Payload: json.RawMessage(payloadBytes),
-	}
-
-	if err := s.p2pServer.SendMessage(peer, msg); err != nil {
+	var blocksMsg BlocksMessage
+	if err := json.Unmarshal(payloadBytes, &blocksMsg); err != nil {
 		return nil, err
 	}
 
-	// Wait for response (simplified - in production, use channels)
-	// This is a placeholder - proper implementation would need async message handling
-	return nil, errors.New("not implemented - requires async message handling")
+	return blocksMsg.Blocks, nil
 }
 
 // StartAutoSync starts automatic synchronization in the background
@@ -165,6 +176,20 @@ func (s *Syncer) StartAutoSync() {
 			if err := s.SyncWithPeers(); err != nil {
 				s.logger.Warnf("Auto-sync failed: %v", err)
 			}
+		}
+	}()
+}
+
+// TriggerSync triggers a sync if not already in progress
+func (s *Syncer) TriggerSync() {
+	if s.isSyncing {
+		s.logger.Debug("Sync already in progress, skipping trigger")
+		return
+	}
+
+	go func() {
+		if err := s.SyncWithPeers(); err != nil {
+			s.logger.Warnf("Triggered sync failed: %v", err)
 		}
 	}()
 }
