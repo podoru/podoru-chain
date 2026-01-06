@@ -55,6 +55,8 @@ Welcome to the Podoru Chain documentation! Podoru Chain is a fully decentralized
 
 ### Network Management
 - [Joining a Network](joining-network.md) - How others can join your blockchain network
+  - Quick join: `make join-wizard` (recommended)
+  - Share network: `make join-info`
 
 ### Technical Deep Dives
 - [Genesis Persistence](technical/genesis-persistence.md) - Understanding genesis file and data persistence

@@ -308,24 +308,39 @@ echo "  - genesis.json         (genesis block)"
 echo "  - docker-compose.yml   (Docker setup)"
 echo "  - README.md            (instructions)"
 echo ""
-echo -e "${YELLOW}Share the '$OUTPUT_DIR' directory with users who want to join.${NC}"
+echo -e "${YELLOW}Creating tarball for easy sharing...${NC}"
 echo ""
 
-# Offer to create a tarball
-read -p "Create tarball for easy sharing? (y/n): " CREATE_TAR
+# Always create tarball at consistent location
+TARBALL_DIR="$HOME/podoru-chain"
+TARBALL="$TARBALL_DIR/podoru-chain-join-info.tar.gz"
 
-if [ "$CREATE_TAR" = "y" ] || [ "$CREATE_TAR" = "Y" ]; then
-    TARBALL="podoru-chain-join-info.tar.gz"
-    tar -czf "$TARBALL" -C "$OUTPUT_DIR" .
-    echo ""
-    echo -e "${GREEN}Created: $TARBALL${NC}"
-    echo ""
-    echo "Share this file with users who want to join:"
-    echo ""
-    echo "  Extract: tar -xzf $TARBALL"
-    echo "  Start:   docker-compose up -d"
-    echo ""
-fi
+# Ensure directory exists
+mkdir -p "$TARBALL_DIR"
+
+# Create tarball
+tar -czf "$TARBALL" -C "$OUTPUT_DIR" .
+
+echo ""
+echo -e "${GREEN}═══════════════════════════════════════════════════════${NC}"
+echo -e "${GREEN}Tarball Created Successfully!${NC}"
+echo -e "${GREEN}═══════════════════════════════════════════════════════${NC}"
+echo ""
+echo -e "${BLUE}Location:${NC} $TARBALL"
+echo ""
+echo -e "${GREEN}Share this file with users who want to join your network.${NC}"
+echo ""
+echo -e "${YELLOW}For recipients:${NC}"
+echo ""
+echo "  1. Receive the tarball file"
+echo "  2. Run: ${BLUE}make join-wizard${NC}"
+echo "  3. Follow the interactive prompts"
+echo ""
+echo "Or manually extract and configure:"
+echo "  tar -xzf podoru-chain-join-info.tar.gz"
+echo "  cd <extract-directory>"
+echo "  docker-compose up -d"
+echo ""
 
 echo -e "${GREEN}═══════════════════════════════════════════════════════${NC}"
 echo -e "${BLUE}Additional Resources${NC}"

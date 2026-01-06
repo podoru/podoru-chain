@@ -18,6 +18,115 @@ To join an existing Podoru Chain network, you need:
 3. **Podoru Chain node binary** or Docker image
 4. **Network connectivity** - Reachable P2P port (default: 9000)
 
+## Quick Join Using Wizard (Recommended)
+
+The easiest way to join a network is using the join wizard:
+
+### Step 1: Get the Join-Info Tarball
+
+Request the join-info tarball from the network operator:
+```bash
+# The operator runs:
+make join-info
+
+# Output: ~/podoru-chain/podoru-chain-join-info.tar.gz
+```
+
+Receive the `podoru-chain-join-info.tar.gz` file via email, file transfer, or download.
+
+### Step 2: Run the Join Wizard
+
+```bash
+make join-wizard
+```
+
+### Step 3: Follow the Interactive Prompts
+
+The wizard will guide you through:
+
+1. **Tarball Location**: Provide the path to the tarball file
+   ```
+   Suggested: ~/podoru-chain/podoru-chain-join-info.tar.gz
+   Or: ~/Downloads/podoru-chain-join-info.tar.gz
+   ```
+
+2. **Network Confirmation**: Verify you're joining the correct network
+   ```
+   Chain Name: Podoru Chain
+   Authorities: 3
+   Genesis Hash: a1b2c3d4...
+
+   Is this the correct network? (Yes/No)
+   ```
+
+3. **Port Configuration**: Resolve any port conflicts
+   ```
+   API Port: 8545  ✓ Available
+   P2P Port: 9000  ✗ In Use → Suggest 9001
+   ```
+
+4. **Review**: Confirm your configuration
+   ```
+   Network: Podoru Chain
+   Bootstrap: 192.168.1.100:9000
+   API Port: 8545
+   P2P Port: 9001
+   Directory: ./podoru-fullnode
+
+   Proceed with setup? (Yes/No)
+   ```
+
+5. **Automatic Start**: The wizard starts your node automatically
+
+### Step 4: Your Node is Running!
+
+```bash
+# Check node status
+curl http://localhost:8545/api/v1/node/info
+
+# Check chain status
+curl http://localhost:8545/api/v1/chain/info
+
+# View logs
+cd podoru-fullnode && docker-compose logs -f
+
+# Stop node
+cd podoru-fullnode && docker-compose down
+```
+
+### What the Wizard Does
+
+The join wizard automatically:
+- ✅ Extracts and validates the tarball
+- ✅ Verifies the genesis block
+- ✅ Checks for port conflicts
+- ✅ Configures your node
+- ✅ Starts Docker containers
+- ✅ Verifies the node is running
+
+### Troubleshooting the Wizard
+
+**"File not found" error:**
+- Check the tarball path is correct
+- Use absolute paths or `~/` for home directory
+
+**"Port in use" error:**
+- The wizard will suggest alternative ports
+- Accept the suggestion or provide your own
+
+**"Docker not running" error:**
+- Start Docker: `sudo systemctl start docker`
+- Or start Docker Desktop on Mac/Windows
+
+**Node not syncing:**
+- Check bootstrap peers are reachable
+- Verify network connectivity
+- Check Docker logs: `cd podoru-fullnode && docker-compose logs`
+
+## Manual Join (Advanced)
+
+If you prefer manual setup or can't use the wizard, follow these detailed instructions:
+
 ## Network Scenarios
 
 ### Scenario 1: Joining on the Same Machine
