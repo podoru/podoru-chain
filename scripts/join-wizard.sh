@@ -1,6 +1,7 @@
 #!/bin/bash
 # Podoru Chain Join Wizard
 # Helps users join an existing Podoru Chain network as a full node
+# Simple terminal version (no dialog required)
 
 set -e
 
@@ -40,68 +41,124 @@ show_welcome() {
 }
 
 check_prerequisites() {
-    log_info "Checking prerequisites..."
+    echo "Checking prerequisites..."
+    echo ""
 
     local missing=()
-
-    # Check dialog
-    if ! command -v dialog &> /dev/null; then
-        missing+=("dialog")
-    fi
+    local warnings=()
 
     # Check Docker
-    if ! is_docker_running; then
-        log_error "Docker is not running"
-        echo ""
-        echo "Please start Docker before running this wizard."
-        exit 1
+    if command -v docker &> /dev/null; then
+        local docker_version=$(docker --version | awk '{print $3}' | sed 's/,//')
+        echo "✓ Docker installed: $docker_version"
+
+        if docker ps &> /dev/null; then
+            echo "✓ Docker daemon is running"
+        else
+            warnings+=("Docker daemon is not running")
+            echo "⚠ Docker daemon is not running"
+        fi
+    else
+        missing+=("docker")
+        echo "✗ Docker is not installed"
     fi
 
-    # Check docker-compose
-    if ! has_docker_compose; then
+    # Check Docker Compose
+    if docker compose version &> /dev/null; then
+        local compose_version=$(docker compose version | awk '{print $4}')
+        echo "✓ Docker Compose installed: $compose_version"
+    elif command -v docker-compose &> /dev/null; then
+        local compose_version=$(docker-compose --version | awk '{print $4}')
+        echo "✓ Docker Compose (legacy) installed: $compose_version"
+    else
         missing+=("docker-compose")
+        echo "✗ Docker Compose is not installed"
     fi
 
     # Check tar
-    if ! command -v tar &> /dev/null; then
+    if command -v tar &> /dev/null; then
+        echo "✓ tar installed"
+    else
         missing+=("tar")
+        echo "✗ tar is not installed"
     fi
 
     # Check jq
-    if ! command -v jq &> /dev/null; then
+    if command -v jq &> /dev/null; then
+        echo "✓ jq installed"
+    else
         missing+=("jq")
+        echo "✗ jq is not installed"
     fi
 
+    echo ""
+
+    # Show installation instructions if missing
     if [ ${#missing[@]} -gt 0 ]; then
-        log_error "Missing required tools: ${missing[*]}"
+        echo "Missing required tools: ${missing[*]}"
         echo ""
-        echo "Please install missing tools:"
+        echo "Installation instructions:"
+        echo ""
+
         for tool in "${missing[@]}"; do
-            echo "  - $tool"
+            case $tool in
+                docker)
+                    echo "  Docker:"
+                    echo "    Ubuntu:  sudo apt-get install -y docker.io"
+                    echo "    macOS:   Download Docker Desktop from https://docker.com"
+                    echo ""
+                    ;;
+                docker-compose)
+                    echo "  Docker Compose:"
+                    echo "    Ubuntu:  sudo apt-get install -y docker-compose-v2"
+                    echo "    macOS:   Included with Docker Desktop"
+                    echo ""
+                    ;;
+                tar)
+                    echo "  tar:"
+                    echo "    Ubuntu:  sudo apt-get install -y tar"
+                    echo ""
+                    ;;
+                jq)
+                    echo "  jq:"
+                    echo "    Ubuntu:  sudo apt-get install -y jq"
+                    echo "    macOS:   brew install jq"
+                    echo ""
+                    ;;
+            esac
         done
+
         exit 1
     fi
 
-    log_success "Prerequisites check passed"
+    # Show warnings
+    if [ ${#warnings[@]} -gt 0 ]; then
+        echo "Warnings:"
+        for warning in "${warnings[@]}"; do
+            echo "  ⚠ $warning"
+        done
+        echo ""
+        read -p "Press Enter to continue or Ctrl+C to exit..."
+    fi
+
+    echo "All prerequisites satisfied!"
+    echo ""
 }
 
 get_tarball_path() {
+    echo "Enter the path to the join-info tarball:"
+    echo ""
+    echo "  Example: ~/podoru-chain-join-info.tar.gz"
+    echo "  Example: /path/to/podoru-chain-join-info.tar.gz"
+    echo ""
+
     while true; do
-        exec 3>&1
-        local tarball=$(dialog --title "Join-Info Tarball" \
-            --inputbox "Enter the path to the join-info tarball:
+        read -p "Tarball path: " tarball
 
-Suggested location:
-~/podoru-chain/podoru-chain-join-info.tar.gz
-
-Or provide full path to the tarball file:" \
-            15 70 \
-            2>&1 1>&3)
-        exec 3>&-
-
-        if [ $? -ne 0 ]; then
-            log_info "Setup cancelled by user"
-            exit 0
+        # Handle empty input
+        if [ -z "$tarball" ]; then
+            echo "Error: Please enter a path"
+            continue
         fi
 
         # Expand tilde
@@ -109,17 +166,13 @@ Or provide full path to the tarball file:" \
 
         # Validate file exists
         if [ ! -f "$tarball" ]; then
-            dialog --title "Error" --msgbox "File not found: $tarball
-
-Please check the path and try again." 10 60
+            echo "Error: File not found: $tarball"
             continue
         fi
 
         # Validate file is readable
         if [ ! -r "$tarball" ]; then
-            dialog --title "Error" --msgbox "Cannot read file: $tarball
-
-Please check permissions and try again." 10 60
+            echo "Error: Cannot read file: $tarball"
             continue
         fi
 
@@ -130,26 +183,18 @@ Please check permissions and try again." 10 60
 
 check_setup_directory() {
     if [ -d "$SETUP_DIR" ]; then
-        dialog --title "Directory Exists" --yesno \
-            "The setup directory already exists:
-$SETUP_DIR
+        echo ""
+        echo "Warning: Setup directory already exists: $SETUP_DIR"
+        echo ""
+        read -p "Overwrite existing directory? (y/n): " overwrite
 
-Do you want to overwrite it?
-
-Yes: Remove existing directory and continue
-No: Exit wizard" \
-            12 60
-
-        case $? in
-            0)  # Yes - remove
-                log_info "Removing existing setup directory..."
-                rm -rf "$SETUP_DIR"
-                ;;
-            *)  # No or ESC
-                log_info "Setup cancelled by user"
-                exit 0
-                ;;
-        esac
+        if [ "$overwrite" = "y" ] || [ "$overwrite" = "Y" ]; then
+            log_info "Removing existing setup directory..."
+            rm -rf "$SETUP_DIR"
+        else
+            log_info "Setup cancelled by user"
+            exit 0
+        fi
     fi
 }
 
@@ -185,13 +230,8 @@ extract_tarball() {
 
     if [ ${#missing[@]} -gt 0 ]; then
         log_error "Missing required files in tarball: ${missing[*]}"
-        dialog --title "Invalid Tarball" --msgbox \
-            "The tarball is missing required files:
-
-$(printf '%s\n' "${missing[@]}")
-
-Please get a valid join-info tarball from the network operator." \
-            15 60
+        echo ""
+        echo "Please get a valid join-info tarball from the network operator."
         return 1
     fi
 
@@ -208,30 +248,22 @@ validate_genesis() {
     local authorities_count=$(jq -r '.authorities | length' "$genesis_file" 2>/dev/null || echo "0")
     local genesis_hash=$(sha256sum "$genesis_file" | awk '{print $1}')
 
-    # Show network information
-    dialog --title "Network Information" --yesno \
-        "Please verify this is the correct network:
+    echo ""
+    echo "Network Information:"
+    echo "  Chain Name:   $chain_name"
+    echo "  Description:  $chain_desc"
+    echo "  Authorities:  $authorities_count"
+    echo "  Genesis Hash: ${genesis_hash:0:16}..."
+    echo ""
 
-Chain Name: $chain_name
-Description: $chain_desc
-Authorities: $authorities_count
-Genesis Hash: ${genesis_hash:0:16}...
+    read -p "Is this the correct network? (y/n): " confirm
 
-Is this the correct network?
-
-Yes: Continue with setup
-No: Exit wizard" \
-        16 70
-
-    case $? in
-        0)  # Yes
-            return 0
-            ;;
-        *)  # No or ESC
-            log_info "Genesis validation cancelled by user"
-            return 1
-            ;;
-    esac
+    if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
+        return 0
+    else
+        log_info "Genesis validation cancelled by user"
+        return 1
+    fi
 }
 
 check_port_conflicts() {
@@ -243,12 +275,12 @@ check_port_conflicts() {
     local new_p2p_port=$p2p_port
 
     # Check API port
-    if is_port_in_use "$api_port"; then
+    if is_port_in_use "$api_port" 2>/dev/null; then
         conflicts+=("API port $api_port is in use")
 
         # Suggest alternative
         for port in {8546..8550}; do
-            if ! is_port_in_use "$port"; then
+            if ! is_port_in_use "$port" 2>/dev/null; then
                 new_api_port=$port
                 break
             fi
@@ -256,12 +288,12 @@ check_port_conflicts() {
     fi
 
     # Check P2P port
-    if is_port_in_use "$p2p_port"; then
+    if is_port_in_use "$p2p_port" 2>/dev/null; then
         conflicts+=("P2P port $p2p_port is in use")
 
         # Suggest alternative
         for port in {9001..9010}; do
-            if ! is_port_in_use "$port"; then
+            if ! is_port_in_use "$port" 2>/dev/null; then
                 new_p2p_port=$port
                 break
             fi
@@ -270,26 +302,19 @@ check_port_conflicts() {
 
     # If conflicts, ask user for resolution
     if [ ${#conflicts[@]} -gt 0 ]; then
-        exec 3>&1
-        local result=$(dialog --title "Port Conflicts" \
-            --form "Port conflicts detected. Please choose alternative ports:
+        echo ""
+        echo "Port conflicts detected:"
+        for conflict in "${conflicts[@]}"; do
+            echo "  ⚠ $conflict"
+        done
+        echo ""
+        echo "Suggested alternatives:"
 
-Conflicts:
-$(printf '%s\n' "${conflicts[@]}")
-" \
-            15 70 2 \
-            "API Port:" 1 1 "$new_api_port" 1 15 10 0 \
-            "P2P Port:" 2 1 "$new_p2p_port" 2 15 10 0 \
-            2>&1 1>&3)
-        exec 3>&-
+        read -p "API Port [$new_api_port]: " input_api
+        new_api_port=${input_api:-$new_api_port}
 
-        if [ $? -ne 0 ]; then
-            return 1
-        fi
-
-        # Parse results
-        new_api_port=$(echo "$result" | sed -n '1p')
-        new_p2p_port=$(echo "$result" | sed -n '2p')
+        read -p "P2P Port [$new_p2p_port]: " input_p2p
+        new_p2p_port=${input_p2p:-$new_p2p_port}
 
         # Update docker-compose.yml
         sed -i "s/\"[0-9]\+:8545\"/\"$new_api_port:8545\"/" "$SETUP_DIR/docker-compose.yml"
@@ -308,22 +333,22 @@ review_configuration() {
     local chain_name=$(jq -r '.initial_state["chain:name"]' "$SETUP_DIR/genesis.json" 2>/dev/null || echo "Unknown")
     local bootstrap_peers=$(grep -A 10 "bootstrap_peers:" "$SETUP_DIR/config.yaml" | grep '  - ' | sed 's/.*"\(.*\)".*/\1/' | tr '\n' ', ' | sed 's/,$//')
 
-    dialog --title "Review Configuration" --yesno \
-        "Please review your configuration:
+    echo ""
+    echo "Configuration Summary:"
+    echo "  Network Name:    $chain_name"
+    echo "  Bootstrap Peers: $bootstrap_peers"
+    echo "  API Port:        $api_port"
+    echo "  P2P Port:        $p2p_port"
+    echo "  Setup Directory: $SETUP_DIR"
+    echo ""
 
-Network Name: $chain_name
-Bootstrap Peers: $bootstrap_peers
-API Port: $api_port
-P2P Port: $p2p_port
-Setup Directory: $SETUP_DIR
+    read -p "Proceed with setup? (y/n): " confirm
 
-Proceed with setup?
-
-Yes: Start the node
-No: Cancel setup" \
-        18 70
-
-    return $?
+    if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
+        return 0
+    else
+        return 1
+    fi
 }
 
 start_node() {
@@ -334,17 +359,12 @@ start_node() {
     # Start docker-compose
     cd "$SETUP_DIR"
 
-    if ! docker-compose up -d 2>&1 | tee /tmp/join-wizard-start.log; then
+    if ! docker-compose up -d 2>&1; then
         log_error "Failed to start node"
-        dialog --title "Startup Failed" --msgbox \
-            "Failed to start the node.
-
-Check logs at: /tmp/join-wizard-start.log
-
-You can try manually:
-  cd $SETUP_DIR
-  docker-compose up -d" \
-            15 60
+        echo ""
+        echo "You can try manually:"
+        echo "  cd $SETUP_DIR"
+        echo "  docker-compose up -d"
         cd - > /dev/null
         return 1
     fi
@@ -369,35 +389,6 @@ You can try manually:
 show_completion() {
     local api_port=$(grep -oP '"\K\d+(?=:8545")' "$SETUP_DIR/docker-compose.yml" | head -1 || echo "8545")
 
-    dialog --title "Setup Complete" --msgbox \
-        "╔═══════════════════════════════════════╗
-║                                       ║
-║           Success!                    ║
-║                                       ║
-║   Your node is now running            ║
-║                                       ║
-╚═══════════════════════════════════════╝
-
-Node Status: Running
-Setup Directory: $SETUP_DIR
-
-Useful Commands:
-• View logs:
-  cd $SETUP_DIR && docker-compose logs -f
-
-• Check node info:
-  curl http://localhost:$api_port/api/v1/node/info
-
-• Check chain info:
-  curl http://localhost:$api_port/api/v1/chain/info
-
-• Stop node:
-  cd $SETUP_DIR && docker-compose down
-
-Documentation:
-  docs/joining-network.md" \
-        28 65
-
     echo ""
     echo -e "${GREEN}╔═══════════════════════════════════════════════════════╗${NC}"
     echo -e "${GREEN}║                                                       ║${NC}"
@@ -408,13 +399,14 @@ Documentation:
     echo "Your Podoru Chain full node is now running!"
     echo ""
     echo "Node directory: $SETUP_DIR"
-    echo "API endpoint: http://localhost:$api_port"
+    echo "API endpoint:   http://localhost:$api_port"
     echo ""
-    echo -e "${YELLOW}Next steps:${NC}"
+    echo -e "${YELLOW}Useful commands:${NC}"
     echo ""
-    echo "  • View logs:  cd $SETUP_DIR && docker-compose logs -f"
-    echo "  • Check node: curl http://localhost:$api_port/api/v1/node/info"
-    echo "  • Stop node:  cd $SETUP_DIR && docker-compose down"
+    echo "  • View logs:   cd $SETUP_DIR && docker-compose logs -f"
+    echo "  • Check node:  curl http://localhost:$api_port/api/v1/node/info"
+    echo "  • Chain info:  curl http://localhost:$api_port/api/v1/chain/info"
+    echo "  • Stop node:   cd $SETUP_DIR && docker-compose down"
     echo ""
 }
 
@@ -451,7 +443,6 @@ main() {
     check_prerequisites
 
     # Get tarball path
-    log_info "Getting tarball location..."
     TARBALL_PATH=$(get_tarball_path)
 
     if [ -z "$TARBALL_PATH" ]; then
