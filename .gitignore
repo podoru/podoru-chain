@@ -54,6 +54,7 @@ _book/
 
 # Node modules
 node_modules/
-package-lock.json
+/package-lock.json
+!explorer/package-lock.json
 podoru-fullnode
 explorer/dist

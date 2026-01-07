@@ -1,5 +1,7 @@
 # Podoru Chain
 
+[![Docker Build](https://github.com/podoru/podoru-chain/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/podoru/podoru-chain/actions/workflows/docker-publish.yml)
+
 A fully decentralized blockchain platform built in Go for storing arbitrary data as key-value pairs, powered by Proof of Authority (PoA) consensus.
 
 ## Features
@@ -20,6 +22,43 @@ A fully decentralized blockchain platform built in Go for storing arbitrary data
 - **Database**: BadgerDB for persistent storage
 - **Networking**: TCP-based P2P with gossip protocol
 - **API**: RESTful HTTP interface
+
+## Installation
+
+### Using Pre-built Images (Recommended)
+
+Pull the latest images from GitHub Container Registry:
+
+```bash
+# Node image
+docker pull ghcr.io/podoru/podoru-chain:latest
+
+# Explorer image
+docker pull ghcr.io/podoru/podoru-chain-explorer:latest
+```
+
+**Multi-architecture support:**
+- `linux/amd64` (x86_64 Intel/AMD)
+- `linux/arm64` (ARM64/Apple Silicon)
+
+Docker will automatically pull the correct architecture for your system.
+
+### Using Production Docker Compose
+
+```bash
+# Clone repository
+git clone https://github.com/podoru/podoru-chain.git
+cd podoru-chain
+
+# Start the network using pre-built GHCR images
+cd docker
+docker-compose -f docker-compose.prod.yml up -d
+```
+
+This will start:
+- Producer node on ports 8545 (API) and 9000 (P2P)
+- Full node on ports 8546 (API) and 9001 (P2P)
+- Explorer on port 3000
 
 ## Quick Start with Setup Wizard (Recommended)
 
@@ -112,7 +151,20 @@ This creates two binaries in `bin/`:
 
 ## Running a Multi-Node Network
 
-### Using Docker Compose (Recommended)
+### Using Docker Compose
+
+**Option 1: Production (Pre-built GHCR Images)**
+
+Use pre-built images for quick deployment:
+
+```bash
+cd docker
+docker-compose -f docker-compose.prod.yml up -d
+```
+
+**Option 2: Development (Local Build)**
+
+Build images locally for development:
 
 1. Setup Docker data directories and generate keys:
 ```bash
@@ -120,9 +172,12 @@ make setup-docker
 make keygen-all
 ```
 
-2. Start the network (3 producers + 1 full node):
+2. Start the network (builds locally):
 ```bash
 make docker-compose-up
+# or manually:
+cd docker
+docker-compose up -d
 ```
 
 3. View logs:
@@ -137,9 +192,8 @@ make docker-compose-down
 
 The network will have the following nodes:
 - Producer 1: API on port 8545, P2P on port 9000
-- Producer 2: API on port 8546, P2P on port 9001
-- Producer 3: API on port 8547, P2P on port 9002
-- Full Node: API on port 8548, P2P on port 9003
+- Full Node: API on port 8546, P2P on port 9001
+- Explorer: Web UI on port 3000 (production compose only)
 
 ### Running a Single Node Locally
 

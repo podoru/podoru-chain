@@ -1,0 +1,63 @@
+version: '3.8'
+
+# Production docker-compose file using pre-built images from GitHub Container Registry
+# For local development, use docker-compose.yml instead
+
+services:
+  producer1:
+    image: ghcr.io/podoru/podoru-chain:latest
+    container_name: podoru-producer1
+    hostname: producer1
+    ports:
+      - "8545:8545"
+      - "9000:9000"
+    volumes:
+      - ./data/producer1:/data
+    environment:
+      - NODE_TYPE=producer
+    networks:
+      podoru:
+        ipv4_address: 172.20.0.10
+    restart: unless-stopped
+
+  fullnode1:
+    image: ghcr.io/podoru/podoru-chain:latest
+    container_name: podoru-fullnode1
+    hostname: fullnode1
+    ports:
+      - "8546:8545"
+      - "9001:9000"
+    volumes:
+      - ./data/fullnode1:/data
+    environment:
+      - NODE_TYPE=full
+    networks:
+      podoru:
+        ipv4_address: 172.20.0.100
+    restart: unless-stopped
+    depends_on:
+      - producer1
+
+  explorer:
+    image: ghcr.io/podoru/podoru-chain-explorer:latest
+    container_name: podoru-explorer
+    hostname: explorer
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_URL=http://producer1:8545
+      - VITE_WS_URL=ws://producer1:8545/api/v1/ws
+      - NODE_ENV=production
+    networks:
+      podoru:
+        ipv4_address: 172.20.0.200
+    restart: unless-stopped
+    depends_on:
+      - producer1
+
+networks:
+  podoru:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
