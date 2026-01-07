@@ -87,7 +87,7 @@ export default function Dashboard() {
         )}
 
         <div>
-          {events.map((event, index) => {
+          {events.map((event) => {
             // Create stable key from event data
             const key = event.type === 'new_block'
               ? `block-${(event.data as BlockEvent).height}-${event.timestamp}`
