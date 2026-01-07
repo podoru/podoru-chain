@@ -9,6 +9,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/podoru/podoru-chain/internal/blockchain"
+	"github.com/podoru/podoru-chain/internal/crypto"
 )
 
 // Response represents a standard API response
@@ -223,5 +224,137 @@ func (s *Server) handleGetMempool(w http.ResponseWriter, r *http.Request) {
 	writeSuccess(w, map[string]interface{}{
 		"count":        len(transactions),
 		"transactions": transactions,
+	})
+}
+
+// BalanceResponse represents a balance response
+type BalanceResponse struct {
+	Address          string `json:"address"`
+	Balance          string `json:"balance"`
+	BalanceFormatted string `json:"balance_formatted"`
+}
+
+// handleGetBalance returns the balance for an address
+func (s *Server) handleGetBalance(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	address := vars["address"]
+
+	// Validate address format
+	if !crypto.IsValidAddress(address) {
+		writeError(w, http.StatusBadRequest, "invalid address format")
+		return
+	}
+
+	balance, err := s.node.GetChain().GetBalance(address)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeSuccess(w, BalanceResponse{
+		Address:          address,
+		Balance:          balance.String(),
+		BalanceFormatted: blockchain.FormatBalance(balance),
+	})
+}
+
+// TokenInfoResponse represents token information
+type TokenInfoResponse struct {
+	Name        string `json:"name"`
+	Symbol      string `json:"symbol"`
+	Decimals    int    `json:"decimals"`
+	TotalSupply string `json:"total_supply,omitempty"`
+}
+
+// handleGetTokenInfo returns token information
+func (s *Server) handleGetTokenInfo(w http.ResponseWriter, r *http.Request) {
+	chain := s.node.GetChain()
+	tokenConfig := chain.GetTokenConfig()
+
+	if tokenConfig == nil {
+		// Return default token info for legacy chains
+		writeSuccess(w, TokenInfoResponse{
+			Name:     blockchain.TokenName,
+			Symbol:   blockchain.TokenSymbol,
+			Decimals: blockchain.TokenDecimals,
+		})
+		return
+	}
+
+	writeSuccess(w, TokenInfoResponse{
+		Name:        tokenConfig.Name,
+		Symbol:      tokenConfig.Symbol,
+		Decimals:    tokenConfig.Decimals,
+		TotalSupply: tokenConfig.InitialSupply,
+	})
+}
+
+// GasEstimateRequest represents a gas estimate request
+type GasEstimateRequest struct {
+	TransactionSize int `json:"transaction_size"`
+}
+
+// GasEstimateResponse represents a gas estimate response
+type GasEstimateResponse struct {
+	TransactionSize int    `json:"transaction_size"`
+	BaseFee         string `json:"base_fee"`
+	PerByteFee      string `json:"per_byte_fee"`
+	SizeFee         string `json:"size_fee"`
+	TotalFee        string `json:"total_fee"`
+	TotalFeeFormatted string `json:"total_fee_formatted"`
+}
+
+// handleEstimateGas estimates gas fee for a transaction
+func (s *Server) handleEstimateGas(w http.ResponseWriter, r *http.Request) {
+	var req GasEstimateRequest
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.TransactionSize <= 0 {
+		writeError(w, http.StatusBadRequest, "transaction_size must be positive")
+		return
+	}
+
+	chain := s.node.GetChain()
+	estimate := chain.EstimateGasFee(req.TransactionSize)
+
+	writeSuccess(w, GasEstimateResponse{
+		TransactionSize:   estimate.TransactionSize,
+		BaseFee:           estimate.BaseFee.String(),
+		PerByteFee:        chain.GetGasConfig().PerByteFee.String(),
+		SizeFee:           estimate.SizeFee.String(),
+		TotalFee:          estimate.TotalFee.String(),
+		TotalFeeFormatted: blockchain.FormatBalance(estimate.TotalFee),
+	})
+}
+
+// GasConfigResponse represents gas configuration
+type GasConfigResponse struct {
+	Enabled    bool   `json:"enabled"`
+	BaseFee    string `json:"base_fee"`
+	PerByteFee string `json:"per_byte_fee"`
+}
+
+// handleGetGasConfig returns gas configuration
+func (s *Server) handleGetGasConfig(w http.ResponseWriter, r *http.Request) {
+	chain := s.node.GetChain()
+	gasConfig := chain.GetGasConfig()
+
+	if gasConfig == nil {
+		writeSuccess(w, GasConfigResponse{
+			Enabled:    false,
+			BaseFee:    "0",
+			PerByteFee: "0",
+		})
+		return
+	}
+
+	writeSuccess(w, GasConfigResponse{
+		Enabled:    !gasConfig.IsZeroFee(),
+		BaseFee:    gasConfig.BaseFee.String(),
+		PerByteFee: gasConfig.PerByteFee.String(),
 	})
 }

@@ -78,6 +78,14 @@ func (s *Server) setupRoutes() {
 	// Mempool endpoints
 	s.router.HandleFunc("/api/v1/mempool", s.handleGetMempool).Methods("GET")
 
+	// Balance and Token endpoints
+	s.router.HandleFunc("/api/v1/balance/{address}", s.handleGetBalance).Methods("GET")
+	s.router.HandleFunc("/api/v1/token/info", s.handleGetTokenInfo).Methods("GET")
+
+	// Gas endpoints
+	s.router.HandleFunc("/api/v1/gas/config", s.handleGetGasConfig).Methods("GET")
+	s.router.HandleFunc("/api/v1/gas/estimate", s.handleEstimateGas).Methods("POST")
+
 	// WebSocket endpoint
 	s.router.HandleFunc("/api/v1/ws", s.wsServer.HandleWebSocket)
 

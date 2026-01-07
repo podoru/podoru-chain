@@ -132,15 +132,34 @@ func (n *Node) Start() error {
 
 // initializeChain initializes the blockchain (load or create genesis)
 func (n *Node) initializeChain() error {
+	// Load genesis config for gas and token configuration
+	genesisConfig, err := blockchain.LoadGenesisConfig(n.config.GenesisPath)
+	if err != nil {
+		return fmt.Errorf("failed to load genesis config: %w", err)
+	}
+
+	// Set gas and token configuration
+	if genesisConfig.GasConfig != nil {
+		gasConfig := genesisConfig.GetGasConfig()
+		if gasConfig != nil {
+			n.chain.SetGasConfig(gasConfig)
+			n.logger.Infof("Gas fees enabled: base=%s, per_byte=%s",
+				gasConfig.BaseFee.String(), gasConfig.PerByteFee.String())
+		}
+	}
+
+	if genesisConfig.TokenConfig != nil {
+		n.chain.SetTokenConfig(genesisConfig.TokenConfig)
+		n.logger.Infof("Token configured: %s (%s), decimals=%d",
+			genesisConfig.TokenConfig.Name,
+			genesisConfig.TokenConfig.Symbol,
+			genesisConfig.TokenConfig.Decimals)
+	}
+
 	// Try to load existing chain
 	if err := n.chain.LoadFromStorage(); err != nil {
 		// Chain doesn't exist, create genesis
 		n.logger.Info("Creating genesis block...")
-
-		genesisConfig, err := blockchain.LoadGenesisConfig(n.config.GenesisPath)
-		if err != nil {
-			return fmt.Errorf("failed to load genesis config: %w", err)
-		}
 
 		genesisBlock := blockchain.CreateGenesisBlock(genesisConfig)
 
@@ -149,6 +168,11 @@ func (n *Node) initializeChain() error {
 		}
 
 		n.logger.Info("Genesis block created")
+
+		// Log initial balances if present
+		if len(genesisConfig.InitialBalances) > 0 {
+			n.logger.Infof("Distributed initial balances to %d addresses", len(genesisConfig.InitialBalances))
+		}
 	} else {
 		n.logger.Infof("Loaded blockchain from storage (height: %d)", n.chain.GetHeight())
 	}
@@ -251,6 +275,37 @@ func (n *Node) handleNewTransaction(peer *network.Peer, msg *network.Message) er
 	tx := newTxMsg.Transaction
 	if tx == nil {
 		return fmt.Errorf("transaction is nil")
+	}
+
+	// Validate balance for gas fees and transfers
+	if !tx.IsGenesisTransaction() {
+		senderBalance, err := n.chain.GetBalance(tx.From)
+		if err != nil {
+			n.logger.Debugf("Failed to get sender balance: %v", err)
+			return nil
+		}
+
+		if n.chain.HasGasFees() {
+			if err := blockchain.ValidateTransactionBalance(tx, senderBalance, n.chain.GetGasConfig()); err != nil {
+				n.logger.Debugf("Balance validation failed: %v", err)
+				return nil
+			}
+		}
+
+		if tx.HasTransferOperations() {
+			if err := blockchain.ValidateTransferBalance(tx, senderBalance, n.chain.GetGasConfig()); err != nil {
+				n.logger.Debugf("Transfer balance validation failed: %v", err)
+				return nil
+			}
+		}
+	}
+
+	// Validate MINT operations
+	if tx.HasMintOperations() {
+		if err := blockchain.ValidateMintOperation(tx, n.config.Authorities); err != nil {
+			n.logger.Debugf("MINT validation failed: %v", err)
+			return nil
+		}
 	}
 
 	// Add transaction to mempool (this will validate it)
@@ -410,6 +465,23 @@ func (n *Node) produceBlock() error {
 	// Broadcast block event via WebSocket
 	n.broadcastBlockEvent(block)
 
+	// Log collected fees if gas is enabled
+	if n.chain.HasGasFees() && len(transactions) > 0 {
+		gasConfig := n.chain.GetGasConfig()
+		if gasConfig != nil {
+			totalFees := blockchain.NewBalance(nil)
+			for _, tx := range transactions {
+				if !tx.IsGenesisTransaction() {
+					fee := gasConfig.CalculateGasFee(tx.Size())
+					totalFees.Add(fee)
+				}
+			}
+			n.logger.Infof("Block %d produced successfully (txs: %d, fees collected: %s wei)",
+				nextHeight, len(transactions), totalFees.String())
+			return nil
+		}
+	}
+
 	n.logger.Infof("Block %d produced successfully (txs: %d)", nextHeight, len(transactions))
 
 	return nil
@@ -420,6 +492,35 @@ func (n *Node) SubmitTransaction(tx *blockchain.Transaction) error {
 	// Validate transaction
 	if err := tx.Validate(); err != nil {
 		return fmt.Errorf("invalid transaction: %w", err)
+	}
+
+	// Validate balance if gas fees are enabled or if transaction has transfers
+	if !tx.IsGenesisTransaction() {
+		senderBalance, err := n.chain.GetBalance(tx.From)
+		if err != nil {
+			return fmt.Errorf("failed to get sender balance: %w", err)
+		}
+
+		// Validate gas fee balance
+		if n.chain.HasGasFees() {
+			if err := blockchain.ValidateTransactionBalance(tx, senderBalance, n.chain.GetGasConfig()); err != nil {
+				return fmt.Errorf("balance validation failed: %w", err)
+			}
+		}
+
+		// Validate transfer balance (if any transfers)
+		if tx.HasTransferOperations() {
+			if err := blockchain.ValidateTransferBalance(tx, senderBalance, n.chain.GetGasConfig()); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Validate MINT operations
+	if tx.HasMintOperations() {
+		if err := blockchain.ValidateMintOperation(tx, n.config.Authorities); err != nil {
+			return err
+		}
 	}
 
 	// Add to mempool

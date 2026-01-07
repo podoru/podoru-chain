@@ -10,9 +10,12 @@ import (
 
 // GenesisConfig defines the genesis block configuration
 type GenesisConfig struct {
-	Timestamp    int64             `json:"timestamp"`
-	Authorities  []string          `json:"authorities"`
-	InitialState map[string]string `json:"initial_state"`
+	Timestamp       int64             `json:"timestamp"`
+	Authorities     []string          `json:"authorities"`
+	InitialState    map[string]string `json:"initial_state"`
+	TokenConfig     *TokenConfig      `json:"token_config,omitempty"`
+	GasConfig       *GasConfigJSON    `json:"gas_config,omitempty"`
+	InitialBalances map[string]string `json:"initial_balances,omitempty"` // address -> amount in wei
 }
 
 // LoadGenesisConfig loads genesis configuration from a file
@@ -49,7 +52,51 @@ func (gc *GenesisConfig) Validate() error {
 		seen[addr] = true
 	}
 
+	// Validate token config if present
+	if gc.TokenConfig != nil {
+		if err := gc.TokenConfig.Validate(); err != nil {
+			return fmt.Errorf("invalid token config: %w", err)
+		}
+	}
+
+	// Validate gas config if present
+	if gc.GasConfig != nil {
+		gasConfig, err := GasConfigFromJSON(gc.GasConfig)
+		if err != nil {
+			return fmt.Errorf("invalid gas config: %w", err)
+		}
+		if err := gasConfig.Validate(); err != nil {
+			return fmt.Errorf("invalid gas config: %w", err)
+		}
+	}
+
+	// Validate initial balances if present
+	if gc.InitialBalances != nil {
+		for addr, amountStr := range gc.InitialBalances {
+			if _, err := NewBalanceFromString(amountStr); err != nil {
+				return fmt.Errorf("invalid balance for %s: %w", addr, err)
+			}
+		}
+	}
+
 	return nil
+}
+
+// HasTokenConfig returns true if the genesis has token configuration
+func (gc *GenesisConfig) HasTokenConfig() bool {
+	return gc.TokenConfig != nil
+}
+
+// GetGasConfig returns the gas configuration or default if not set
+func (gc *GenesisConfig) GetGasConfig() *GasConfig {
+	if gc.GasConfig == nil {
+		return nil // No gas fees for legacy genesis
+	}
+	config, err := GasConfigFromJSON(gc.GasConfig)
+	if err != nil {
+		return DefaultGasConfig()
+	}
+	return config
 }
 
 // CreateGenesisBlock creates the genesis block from configuration
@@ -63,10 +110,13 @@ func CreateGenesisBlock(config *GenesisConfig) *Block {
 	sort.Strings(keys)
 
 	var transactions []*Transaction
+	var nonce uint64 = 0
+
+	// Create SET transactions for initial state
 	for _, key := range keys {
 		value := config.InitialState[key]
 		tx := &Transaction{
-			From:      "0x0000000000000000000000000000000000000000", // Genesis address
+			From:      GenesisAddress,
 			Timestamp: config.Timestamp,
 			Data: &TransactionData{
 				Operations: []*KVOperation{
@@ -77,25 +127,69 @@ func CreateGenesisBlock(config *GenesisConfig) *Block {
 					},
 				},
 			},
-			Nonce:     0,
+			Nonce:     nonce,
 			Signature: []byte{}, // Genesis transactions are not signed
 		}
 		tx.ID = tx.Hash()
 		transactions = append(transactions, tx)
+		nonce++
+	}
+
+	// Create MINT transactions for initial balances
+	if config.InitialBalances != nil {
+		// Sort addresses for deterministic order
+		addresses := make([]string, 0, len(config.InitialBalances))
+		for addr := range config.InitialBalances {
+			addresses = append(addresses, addr)
+		}
+		sort.Strings(addresses)
+
+		for _, addr := range addresses {
+			amountStr := config.InitialBalances[addr]
+			balance, err := NewBalanceFromString(amountStr)
+			if err != nil {
+				continue // Skip invalid balances (already validated)
+			}
+
+			tx := &Transaction{
+				From:      GenesisAddress,
+				Timestamp: config.Timestamp,
+				Data: &TransactionData{
+					Operations: []*KVOperation{
+						{
+							Type:  OpTypeMint,
+							Key:   BalanceKey(addr),
+							Value: balance.ToBytes(),
+						},
+					},
+				},
+				Nonce:     nonce,
+				Signature: []byte{},
+			}
+			tx.ID = tx.Hash()
+			transactions = append(transactions, tx)
+			nonce++
+		}
 	}
 
 	// Calculate merkle root
 	merkleRoot := CalculateMerkleRoot(transactions)
 
+	// Determine block version based on token config
+	version := uint32(1)
+	if config.HasTokenConfig() {
+		version = 2 // Version 2 indicates gas fees enabled
+	}
+
 	// Create genesis header
 	header := &BlockHeader{
-		Version:      1,
+		Version:      version,
 		Height:       0,
 		PreviousHash: make([]byte, 32), // All zeros for genesis
 		Timestamp:    config.Timestamp,
 		MerkleRoot:   merkleRoot,
 		StateRoot:    make([]byte, 32), // Will be calculated after applying txs
-		ProducerAddr: "0x0000000000000000000000000000000000000000",
+		ProducerAddr: GenesisAddress,
 		Nonce:        0,
 	}
 

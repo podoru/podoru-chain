@@ -1,4 +1,4 @@
-.PHONY: all build test clean clean-wizard docker docker-compose-up docker-compose-down keygen deps run setup-wizard join-info join-wizard update-node explorer-build explorer-dev explorer-docker stack-up stack-down stack-logs
+.PHONY: all build test clean clean-wizard docker docker-compose-up docker-compose-down keygen deps run setup-wizard join-info join-wizard update-node explorer-build explorer-dev explorer-docker stack-up stack-down stack-logs patch-genesis patch-all-genesis
 
 # Build the node binary
 build:
@@ -179,6 +179,35 @@ stack-down:
 stack-logs:
 	@cd docker && docker-compose logs -f
 
+# Patch genesis.json with token and gas configuration
+patch-genesis:
+	@echo "Patching genesis.json with token and gas configuration..."
+	@if [ -z "$(GENESIS)" ]; then \
+		bash scripts/patch-genesis.sh; \
+	else \
+		bash scripts/patch-genesis.sh "$(GENESIS)" "$(OUTPUT)"; \
+	fi
+
+# Patch all genesis files in docker/data with token and gas configuration
+patch-all-genesis:
+	@echo "Patching all genesis files in docker/data..."
+	@for f in docker/data/*/genesis.json; do \
+		if [ -f "$$f" ]; then \
+			echo "Patching $$f..."; \
+			bash scripts/patch-genesis.sh "$$f" "$$f"; \
+		fi; \
+	done
+	@echo "All genesis files patched!"
+
+# Preview genesis patch without applying
+patch-genesis-dry-run:
+	@echo "Previewing genesis patch..."
+	@if [ -z "$(GENESIS)" ]; then \
+		bash scripts/patch-genesis.sh --dry-run; \
+	else \
+		bash scripts/patch-genesis.sh --dry-run "$(GENESIS)"; \
+	fi
+
 # Show help
 help:
 	@echo "Podoru Chain Makefile Commands:"
@@ -212,6 +241,12 @@ help:
 	@echo "  make docker-compose-up - Start multi-node network"
 	@echo "  make docker-compose-down - Stop multi-node network"
 	@echo "  make docker-compose-logs - View network logs"
+	@echo ""
+	@echo "Genesis Migration:"
+	@echo "  make patch-genesis         - Patch config/genesis.json with token/gas config"
+	@echo "  make patch-genesis GENESIS=<path> OUTPUT=<path> - Patch specific genesis file"
+	@echo "  make patch-all-genesis     - Patch all genesis files in docker/data"
+	@echo "  make patch-genesis-dry-run - Preview genesis patch without applying"
 	@echo ""
 	@echo "Development:"
 	@echo "  make run CONFIG=<path> - Run a single node locally"

@@ -5,7 +5,9 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"math/big"
 	"sort"
+	"strings"
 	"sync"
 )
 
@@ -109,6 +111,8 @@ type Chain struct {
 	state        *State
 	authorities  []string
 	nonces       map[string]uint64 // Track nonces per address
+	gasConfig    *GasConfig        // Gas fee configuration (nil for legacy chains)
+	tokenConfig  *TokenConfig      // Token configuration (nil for legacy chains)
 }
 
 // NewChain creates a new blockchain
@@ -119,6 +123,53 @@ func NewChain(storage Storage, authorities []string) *Chain {
 		authorities: authorities,
 		nonces:      make(map[string]uint64),
 	}
+}
+
+// NewChainWithConfig creates a new blockchain with gas and token configuration
+func NewChainWithConfig(storage Storage, authorities []string, gasConfig *GasConfig, tokenConfig *TokenConfig) *Chain {
+	return &Chain{
+		storage:     storage,
+		state:       NewState(),
+		authorities: authorities,
+		nonces:      make(map[string]uint64),
+		gasConfig:   gasConfig,
+		tokenConfig: tokenConfig,
+	}
+}
+
+// SetGasConfig sets the gas configuration
+func (c *Chain) SetGasConfig(config *GasConfig) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.gasConfig = config
+}
+
+// GetGasConfig returns the gas configuration
+func (c *Chain) GetGasConfig() *GasConfig {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.gasConfig
+}
+
+// SetTokenConfig sets the token configuration
+func (c *Chain) SetTokenConfig(config *TokenConfig) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.tokenConfig = config
+}
+
+// GetTokenConfig returns the token configuration
+func (c *Chain) GetTokenConfig() *TokenConfig {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.tokenConfig
+}
+
+// HasGasFees returns true if gas fees are enabled
+func (c *Chain) HasGasFees() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.gasConfig != nil && !c.gasConfig.IsZeroFee()
 }
 
 // Initialize initializes the chain with a genesis block
@@ -288,18 +339,195 @@ func (c *Chain) applyTransactionsToState(state *State, transactions []*Transacti
 						return fmt.Errorf("failed to delete state: %w", err)
 					}
 				}
+			case OpTypeMint:
+				// MINT operation: add amount to existing balance
+				if err := c.applyMintOperation(state, op); err != nil {
+					return err
+				}
+			case OpTypeTransfer:
+				// TRANSFER operation: deduct from sender and add to recipient
+				if err := c.applyTransferOperation(state, tx.From, op); err != nil {
+					return err
+				}
 			default:
 				return fmt.Errorf("unknown operation type: %s", op.Type)
 			}
 		}
 
 		// Update nonce
-		if state == c.state && tx.From != "0x0000000000000000000000000000000000000000" {
+		if state == c.state && tx.From != GenesisAddress {
 			c.nonces[tx.From] = tx.Nonce + 1
 		}
 	}
 
 	return nil
+}
+
+// applyMintOperation applies a MINT operation to state
+func (c *Chain) applyMintOperation(state *State, op *KVOperation) error {
+	// Get current balance
+	currentData, _ := state.Get(op.Key)
+	currentBalance, err := BalanceFromBytes(currentData)
+	if err != nil {
+		currentBalance = NewBalance(big.NewInt(0))
+	}
+
+	// Add minted amount
+	mintAmount := new(big.Int).SetBytes(op.Value)
+	currentBalance.Add(mintAmount)
+
+	// Save new balance
+	newData := currentBalance.ToBytes()
+	state.Set(op.Key, newData)
+
+	// Persist to storage if this is the actual state
+	if state == c.state {
+		if err := c.storage.SaveState(op.Key, newData); err != nil {
+			return fmt.Errorf("failed to save minted balance: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// applyTransferOperation applies a TRANSFER operation to state
+// It deducts from sender and adds to recipient
+func (c *Chain) applyTransferOperation(state *State, senderAddr string, op *KVOperation) error {
+	amount := new(big.Int).SetBytes(op.Value)
+
+	// Deduct from sender
+	senderKey := BalanceKey(senderAddr)
+	senderData, _ := state.Get(senderKey)
+	senderBalance, err := BalanceFromBytes(senderData)
+	if err != nil {
+		senderBalance = NewBalance(big.NewInt(0))
+	}
+
+	if err := senderBalance.Sub(amount); err != nil {
+		return fmt.Errorf("insufficient balance for transfer: %w", err)
+	}
+
+	state.Set(senderKey, senderBalance.ToBytes())
+	if state == c.state {
+		if err := c.storage.SaveState(senderKey, senderBalance.ToBytes()); err != nil {
+			return fmt.Errorf("failed to save sender balance: %w", err)
+		}
+	}
+
+	// Add to recipient (op.Key is the recipient's balance key)
+	recipientData, _ := state.Get(op.Key)
+	recipientBalance, err := BalanceFromBytes(recipientData)
+	if err != nil {
+		recipientBalance = NewBalance(big.NewInt(0))
+	}
+
+	recipientBalance.Add(amount)
+
+	state.Set(op.Key, recipientBalance.ToBytes())
+	if state == c.state {
+		if err := c.storage.SaveState(op.Key, recipientBalance.ToBytes()); err != nil {
+			return fmt.Errorf("failed to save recipient balance: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// ApplyTransactionsWithFees applies transactions with gas fee deduction and collection
+// Returns total fees collected and any error
+func (c *Chain) ApplyTransactionsWithFees(state *State, transactions []*Transaction, blockProducer string) (*big.Int, error) {
+	totalFees := big.NewInt(0)
+
+	for _, tx := range transactions {
+		// Skip fee deduction for genesis transactions
+		if !tx.IsGenesisTransaction() && c.gasConfig != nil {
+			txSize := tx.Size()
+			gasFee := c.gasConfig.CalculateGasFee(txSize)
+
+			// Deduct fee from sender
+			senderKey := BalanceKey(tx.From)
+			senderData, _ := state.Get(senderKey)
+			senderBalance, err := BalanceFromBytes(senderData)
+			if err != nil {
+				senderBalance = NewBalance(big.NewInt(0))
+			}
+
+			if err := senderBalance.Sub(gasFee); err != nil {
+				return nil, fmt.Errorf("tx %s: insufficient balance for gas: %w", tx.HashString(), err)
+			}
+
+			state.Set(senderKey, senderBalance.ToBytes())
+			if state == c.state {
+				if err := c.storage.SaveState(senderKey, senderBalance.ToBytes()); err != nil {
+					return nil, fmt.Errorf("failed to save sender balance: %w", err)
+				}
+			}
+
+			totalFees.Add(totalFees, gasFee)
+		}
+
+		// Apply operations
+		for _, op := range tx.Data.Operations {
+			// Check authority for MINT operations
+			if op.Type == OpTypeMint && !tx.IsGenesisTransaction() {
+				if !c.IsAuthority(tx.From) {
+					return nil, fmt.Errorf("tx %s: only authorities can mint tokens", tx.HashString())
+				}
+			}
+
+			switch op.Type {
+			case OpTypeSet:
+				state.Set(op.Key, op.Value)
+				if state == c.state {
+					if err := c.storage.SaveState(op.Key, op.Value); err != nil {
+						return nil, fmt.Errorf("failed to save state: %w", err)
+					}
+				}
+			case OpTypeDelete:
+				state.Delete(op.Key)
+				if state == c.state {
+					if err := c.storage.DeleteState(op.Key); err != nil {
+						return nil, fmt.Errorf("failed to delete state: %w", err)
+					}
+				}
+			case OpTypeMint:
+				if err := c.applyMintOperation(state, op); err != nil {
+					return nil, err
+				}
+			case OpTypeTransfer:
+				if err := c.applyTransferOperation(state, tx.From, op); err != nil {
+					return nil, err
+				}
+			default:
+				return nil, fmt.Errorf("unknown operation type: %s", op.Type)
+			}
+		}
+
+		// Update nonce
+		if state == c.state && !tx.IsGenesisTransaction() {
+			c.nonces[tx.From] = tx.Nonce + 1
+		}
+	}
+
+	// Credit fees to block producer
+	if blockProducer != "" && blockProducer != GenesisAddress && totalFees.Sign() > 0 {
+		producerKey := BalanceKey(blockProducer)
+		producerData, _ := state.Get(producerKey)
+		producerBalance, err := BalanceFromBytes(producerData)
+		if err != nil {
+			producerBalance = NewBalance(big.NewInt(0))
+		}
+		producerBalance.Add(totalFees)
+
+		state.Set(producerKey, producerBalance.ToBytes())
+		if state == c.state {
+			if err := c.storage.SaveState(producerKey, producerBalance.ToBytes()); err != nil {
+				return nil, fmt.Errorf("failed to save producer balance: %w", err)
+			}
+		}
+	}
+
+	return totalFees, nil
 }
 
 // GetState retrieves a value from the current state
@@ -390,6 +618,72 @@ func (c *Chain) GetAuthorities() []string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return append([]string{}, c.authorities...)
+}
+
+// IsAuthority checks if an address is an authority
+func (c *Chain) IsAuthority(address string) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	normalizedAddr := strings.ToLower(address)
+	for _, auth := range c.authorities {
+		if strings.ToLower(auth) == normalizedAddr {
+			return true
+		}
+	}
+	return false
+}
+
+// GetBalance returns the balance for an address
+func (c *Chain) GetBalance(address string) (*big.Int, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	balanceKey := BalanceKey(address)
+	data, exists := c.state.Get(balanceKey)
+	if !exists {
+		return big.NewInt(0), nil
+	}
+
+	balance, err := BalanceFromBytes(data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse balance: %w", err)
+	}
+
+	return balance.Amount, nil
+}
+
+// GetBalanceFromStorage returns the balance for an address from storage
+func (c *Chain) GetBalanceFromStorage(address string) (*big.Int, error) {
+	balanceKey := BalanceKey(address)
+	data, err := c.storage.GetState(balanceKey)
+	if err != nil {
+		return big.NewInt(0), nil // No balance found
+	}
+
+	balance, err := BalanceFromBytes(data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse balance: %w", err)
+	}
+
+	return balance.Amount, nil
+}
+
+// EstimateGasFee estimates the gas fee for a transaction of given size
+func (c *Chain) EstimateGasFee(txSize int) *GasEstimate {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.gasConfig == nil {
+		return &GasEstimate{
+			TransactionSize: txSize,
+			BaseFee:         big.NewInt(0),
+			SizeFee:         big.NewInt(0),
+			TotalFee:        big.NewInt(0),
+		}
+	}
+
+	return c.gasConfig.EstimateGas(txSize)
 }
 
 // ChainInfo contains information about the chain

@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
-import { api, ChainInfo } from '~/lib/api'
+import { api, ChainInfo, TokenInfo, GasConfig } from '~/lib/api'
 import { useWebSocket, BlockEvent, TransactionEvent } from '~/hooks/useWebSocket'
-import { formatHash, formatTimeAgo } from '~/lib/utils'
+import { formatHash, formatTimeAgo, formatBalanceShort, formatGasFee } from '~/lib/utils'
 
 export default function Dashboard() {
   const [chainInfo, setChainInfo] = useState<ChainInfo | null>(null)
+  const [tokenInfo, setTokenInfo] = useState<TokenInfo | null>(null)
+  const [gasConfig, setGasConfig] = useState<GasConfig | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -18,8 +20,14 @@ export default function Dashboard() {
 
   async function loadChainInfo() {
     try {
-      const info = await api.getChainInfo()
+      const [info, token, gas] = await Promise.all([
+        api.getChainInfo(),
+        api.getTokenInfo().catch(() => null),
+        api.getGasConfig().catch(() => null),
+      ])
       setChainInfo(info)
+      setTokenInfo(token)
+      setGasConfig(gas)
       setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load chain info')
@@ -65,6 +73,34 @@ export default function Dashboard() {
             {chainInfo?.authorities.length}
           </div>
         </div>
+
+        {tokenInfo && (
+          <div className="card">
+            <div style={{ fontSize: '0.875rem', color: '#718096', marginBottom: '0.5rem' }}>
+              Token
+            </div>
+            <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#2d3748' }}>
+              {tokenInfo.symbol}
+            </div>
+            <div style={{ fontSize: '0.875rem', color: '#718096', marginTop: '0.25rem' }}>
+              {tokenInfo.name} ({tokenInfo.decimals} decimals)
+            </div>
+          </div>
+        )}
+
+        {gasConfig?.enabled && (
+          <div className="card">
+            <div style={{ fontSize: '0.875rem', color: '#718096', marginBottom: '0.5rem' }}>
+              Gas Fees
+            </div>
+            <div style={{ fontSize: '1rem', fontWeight: '600', color: '#2d3748' }}>
+              Base: {formatGasFee(gasConfig.base_fee)}
+            </div>
+            <div style={{ fontSize: '0.875rem', color: '#718096', marginTop: '0.25rem' }}>
+              + {formatGasFee(gasConfig.per_byte_fee)}/byte
+            </div>
+          </div>
+        )}
 
         <div className="card">
           <div style={{ fontSize: '0.875rem', color: '#718096', marginBottom: '0.5rem' }}>

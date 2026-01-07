@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"math/big"
+	"strings"
 	"time"
 )
 
@@ -133,6 +135,143 @@ func ValidateTransaction(tx *Transaction, currentNonce uint64) error {
 	// Check nonce
 	if tx.Nonce != currentNonce {
 		return fmt.Errorf("invalid nonce: expected %d, got %d", currentNonce, tx.Nonce)
+	}
+
+	return nil
+}
+
+// ValidateTransactionBalance validates that a sender has enough balance for gas fee
+func ValidateTransactionBalance(tx *Transaction, senderBalance *big.Int, gasConfig *GasConfig) error {
+	if tx == nil {
+		return errors.New("transaction is nil")
+	}
+
+	// Genesis transactions don't require balance
+	if tx.IsGenesisTransaction() {
+		return nil
+	}
+
+	// If no gas config, no balance required
+	if gasConfig == nil || gasConfig.IsZeroFee() {
+		return nil
+	}
+
+	// Calculate gas fee
+	txSize := tx.Size()
+	gasFee := gasConfig.CalculateGasFee(txSize)
+
+	// Check if sender has enough balance
+	if senderBalance == nil {
+		senderBalance = big.NewInt(0)
+	}
+
+	if senderBalance.Cmp(gasFee) < 0 {
+		return fmt.Errorf("insufficient balance for gas: have %s, need %s",
+			senderBalance.String(), gasFee.String())
+	}
+
+	return nil
+}
+
+// ValidateMintOperation validates a MINT operation
+func ValidateMintOperation(tx *Transaction, authorities []string) error {
+	if tx == nil {
+		return errors.New("transaction is nil")
+	}
+
+	// Genesis transactions can mint
+	if tx.IsGenesisTransaction() {
+		return nil
+	}
+
+	// Check if transaction has MINT operations
+	if !tx.HasMintOperations() {
+		return nil
+	}
+
+	// Check if sender is an authority
+	normalizedFrom := strings.ToLower(tx.From)
+	isAuth := false
+	for _, auth := range authorities {
+		if strings.ToLower(auth) == normalizedFrom {
+			isAuth = true
+			break
+		}
+	}
+
+	if !isAuth {
+		return fmt.Errorf("only authorities can mint tokens, %s is not an authority", tx.From)
+	}
+
+	return nil
+}
+
+// ValidateTransactionWithChain performs full transaction validation including balance check
+func ValidateTransactionWithChain(tx *Transaction, currentNonce uint64, senderBalance *big.Int, gasConfig *GasConfig, authorities []string) error {
+	// Basic validation
+	if err := ValidateTransaction(tx, currentNonce); err != nil {
+		return err
+	}
+
+	// Balance validation (gas fees)
+	if err := ValidateTransactionBalance(tx, senderBalance, gasConfig); err != nil {
+		return err
+	}
+
+	// Transfer balance validation
+	if err := ValidateTransferBalance(tx, senderBalance, gasConfig); err != nil {
+		return err
+	}
+
+	// MINT operation validation
+	if err := ValidateMintOperation(tx, authorities); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ValidateTransferBalance validates that a sender has enough balance for transfers + gas
+func ValidateTransferBalance(tx *Transaction, senderBalance *big.Int, gasConfig *GasConfig) error {
+	if tx == nil || tx.Data == nil {
+		return nil
+	}
+
+	// Genesis transactions don't require balance check
+	if tx.IsGenesisTransaction() {
+		return nil
+	}
+
+	// Calculate total transfer amount
+	totalTransfer := big.NewInt(0)
+	for _, op := range tx.Data.Operations {
+		if op.Type == OpTypeTransfer {
+			amount := new(big.Int).SetBytes(op.Value)
+			totalTransfer.Add(totalTransfer, amount)
+		}
+	}
+
+	// If no transfers, nothing to validate
+	if totalTransfer.Sign() == 0 {
+		return nil
+	}
+
+	// Calculate gas fee
+	gasFee := big.NewInt(0)
+	if gasConfig != nil && !gasConfig.IsZeroFee() {
+		gasFee = gasConfig.CalculateGasFee(tx.Size())
+	}
+
+	// Total required: transfer amount + gas fee
+	totalRequired := new(big.Int).Add(totalTransfer, gasFee)
+
+	if senderBalance == nil {
+		senderBalance = big.NewInt(0)
+	}
+
+	if senderBalance.Cmp(totalRequired) < 0 {
+		return fmt.Errorf("insufficient balance for transfer: have %s, need %s (transfer: %s, gas: %s)",
+			senderBalance.String(), totalRequired.String(), totalTransfer.String(), gasFee.String())
 	}
 
 	return nil

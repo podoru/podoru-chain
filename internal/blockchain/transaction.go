@@ -14,8 +14,10 @@ import (
 type OperationType string
 
 const (
-	OpTypeSet    OperationType = "SET"
-	OpTypeDelete OperationType = "DELETE"
+	OpTypeSet      OperationType = "SET"
+	OpTypeDelete   OperationType = "DELETE"
+	OpTypeMint     OperationType = "MINT"     // Authority-only mint operation
+	OpTypeTransfer OperationType = "TRANSFER" // Token transfer operation
 )
 
 // KVOperation represents a single key-value operation
@@ -146,12 +148,32 @@ func (tx *Transaction) Validate() error {
 			return fmt.Errorf("operation %d has empty key", i)
 		}
 
-		if op.Type != OpTypeSet && op.Type != OpTypeDelete {
+		if op.Type != OpTypeSet && op.Type != OpTypeDelete && op.Type != OpTypeMint && op.Type != OpTypeTransfer {
 			return fmt.Errorf("operation %d has invalid type: %s", i, op.Type)
 		}
 
 		if op.Type == OpTypeSet && len(op.Value) == 0 {
 			return fmt.Errorf("operation %d is SET but has no value", i)
+		}
+
+		// MINT operations must target balance keys and have a value
+		if op.Type == OpTypeMint {
+			if !IsBalanceKey(op.Key) {
+				return fmt.Errorf("operation %d: MINT key must be a balance key (balance:<address>)", i)
+			}
+			if len(op.Value) == 0 {
+				return fmt.Errorf("operation %d: MINT must have a value (amount)", i)
+			}
+		}
+
+		// TRANSFER operations must target balance keys and have a value
+		if op.Type == OpTypeTransfer {
+			if !IsBalanceKey(op.Key) {
+				return fmt.Errorf("operation %d: TRANSFER key must be a balance key (balance:<address>)", i)
+			}
+			if len(op.Value) == 0 {
+				return fmt.Errorf("operation %d: TRANSFER must have a value (amount)", i)
+			}
 		}
 
 		// Check key and value sizes (prevent DOS)
@@ -189,4 +211,56 @@ func (tx *Transaction) Size() int {
 // HashString returns the transaction hash as a hex string with 0x prefix
 func (tx *Transaction) HashString() string {
 	return fmt.Sprintf("0x%x", tx.ID)
+}
+
+// GenesisAddress is the special address used for genesis transactions
+const GenesisAddress = "0x0000000000000000000000000000000000000000"
+
+// IsGenesisTransaction returns true if the transaction is from the genesis address
+func (tx *Transaction) IsGenesisTransaction() bool {
+	return tx.From == GenesisAddress
+}
+
+// HasMintOperations returns true if the transaction contains any MINT operations
+func (tx *Transaction) HasMintOperations() bool {
+	if tx.Data == nil {
+		return false
+	}
+	for _, op := range tx.Data.Operations {
+		if op.Type == OpTypeMint {
+			return true
+		}
+	}
+	return false
+}
+
+// NewMintOperation creates a new MINT operation
+func NewMintOperation(toAddress string, amount []byte) *KVOperation {
+	return &KVOperation{
+		Type:  OpTypeMint,
+		Key:   BalanceKey(toAddress),
+		Value: amount,
+	}
+}
+
+// NewTransferOperation creates a new TRANSFER operation
+func NewTransferOperation(toAddress string, amount []byte) *KVOperation {
+	return &KVOperation{
+		Type:  OpTypeTransfer,
+		Key:   BalanceKey(toAddress),
+		Value: amount,
+	}
+}
+
+// HasTransferOperations returns true if the transaction contains any TRANSFER operations
+func (tx *Transaction) HasTransferOperations() bool {
+	if tx.Data == nil {
+		return false
+	}
+	for _, op := range tx.Data.Operations {
+		if op.Type == OpTypeTransfer {
+			return true
+		}
+	}
+	return false
 }

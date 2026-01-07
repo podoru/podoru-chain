@@ -36,9 +36,37 @@ export interface Transaction {
 }
 
 export interface Operation {
-  type: 'SET' | 'DELETE'
+  type: 'SET' | 'DELETE' | 'MINT' | 'TRANSFER'
   key: string
   value?: string
+}
+
+export interface BalanceInfo {
+  address: string
+  balance: string
+  balance_formatted: string
+}
+
+export interface TokenInfo {
+  name: string
+  symbol: string
+  decimals: number
+  total_supply?: string
+}
+
+export interface GasConfig {
+  enabled: boolean
+  base_fee: string
+  per_byte_fee: string
+}
+
+export interface GasEstimate {
+  transaction_size: number
+  base_fee: string
+  per_byte_fee: string
+  size_fee: string
+  total_fee: string
+  total_fee_formatted: string
 }
 
 export interface NodeInfo {
@@ -174,6 +202,28 @@ class APIClient {
   // Mempool endpoints
   async getMempool(): Promise<MempoolInfo> {
     return this.fetch<MempoolInfo>('/api/v1/mempool')
+  }
+
+  // Balance endpoints
+  async getBalance(address: string): Promise<BalanceInfo> {
+    return this.fetch<BalanceInfo>(`/api/v1/balance/${address}`)
+  }
+
+  // Token endpoints
+  async getTokenInfo(): Promise<TokenInfo> {
+    return this.fetch<TokenInfo>('/api/v1/token/info')
+  }
+
+  // Gas endpoints
+  async getGasConfig(): Promise<GasConfig> {
+    return this.fetch<GasConfig>('/api/v1/gas/config')
+  }
+
+  async estimateGas(transactionSize: number): Promise<GasEstimate> {
+    return this.fetch<GasEstimate>('/api/v1/gas/estimate', {
+      method: 'POST',
+      body: JSON.stringify({ transaction_size: transactionSize }),
+    })
   }
 }
 

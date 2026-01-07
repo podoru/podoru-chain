@@ -7,8 +7,22 @@
   ],
   "initial_state": {
     "chain:name": "Podoru Chain",
-    "chain:version": "1.0.0",
-    "chain:description": "Decentralized blockchain for storing any data",
-    "system:initialized": "true"
+    "chain:version": "2.0.0",
+    "chain:description": "Decentralized blockchain with PDR token"
+  },
+  "token_config": {
+    "name": "Podoru",
+    "symbol": "PDR",
+    "decimals": 18,
+    "initial_supply": "100000000000000000000000000"
+  },
+  "gas_config": {
+    "base_fee": "1000",
+    "per_byte_fee": "10"
+  },
+  "initial_balances": {
+    "0xf891da4c1309ff4ecc25bc46a858260d13ab4a49": "33333333333333333333333334",
+    "0x81ed8586dc0ae142da3d5c4d45a8c8adb59cdc38": "33333333333333333333333333",
+    "0xffbcafc6a236ce665eb079fbd599a23977e7c5b1": "33333333333333333333333333"
   }
 }
