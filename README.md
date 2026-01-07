@@ -66,12 +66,55 @@ The easiest way to set up your Podoru Chain network is using the interactive set
 
 ### Prerequisites
 
-- Go 1.24 or higher
-- Docker and Docker Compose
-- dialog (for interactive UI)
-  - Ubuntu/Debian: `sudo apt-get install dialog`
-  - macOS: `brew install dialog`
-  - Fedora/RHEL: `sudo dnf install dialog`
+**1. Go 1.24 or higher**
+
+```bash
+# Check if Go is installed
+go version
+
+# Install Go (Ubuntu/Debian)
+sudo apt-get update
+sudo apt-get install -y golang-go
+
+# Install Go (macOS with Homebrew)
+brew install go
+
+# Or download from https://go.dev/dl/
+```
+
+**2. Docker and Docker Compose**
+
+```bash
+# Check if Docker is installed and running
+docker --version
+docker compose version
+
+# Install Docker (Ubuntu)
+sudo apt-get update
+sudo apt-get install -y docker.io docker-compose-v2
+sudo systemctl start docker
+sudo systemctl enable docker
+sudo usermod -aG docker $USER  # Add user to docker group (logout/login required)
+
+# Install Docker (macOS)
+# Download Docker Desktop from https://www.docker.com/products/docker-desktop
+
+# Verify Docker is running
+docker ps
+```
+
+**3. dialog (for interactive UI)**
+
+```bash
+# Ubuntu/Debian
+sudo apt-get install -y dialog
+
+# macOS
+brew install dialog
+
+# Fedora/RHEL
+sudo dnf install dialog
+```
 
 ### Setup
 
