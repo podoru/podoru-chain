@@ -17,6 +17,124 @@ source "$SCRIPT_DIR/lib/docker-compose-generator.sh"
 # Change to project root
 cd "$PROJECT_ROOT"
 
+#==============================================================================
+# Prerequisite Checks
+#==============================================================================
+
+check_prerequisites() {
+    local missing=()
+    local warnings=()
+
+    echo "Checking prerequisites..."
+    echo ""
+
+    # Check Go
+    if command -v go &> /dev/null; then
+        local go_version=$(go version | awk '{print $3}' | sed 's/go//')
+        echo "✓ Go installed: $go_version"
+    else
+        missing+=("go")
+        echo "✗ Go is not installed"
+    fi
+
+    # Check Docker
+    if command -v docker &> /dev/null; then
+        local docker_version=$(docker --version | awk '{print $3}' | sed 's/,//')
+        echo "✓ Docker installed: $docker_version"
+
+        # Check if Docker daemon is running
+        if docker ps &> /dev/null; then
+            echo "✓ Docker daemon is running"
+        else
+            warnings+=("Docker daemon is not running. Please start Docker first.")
+            echo "⚠ Docker daemon is not running"
+        fi
+    else
+        missing+=("docker")
+        echo "✗ Docker is not installed"
+    fi
+
+    # Check Docker Compose
+    if docker compose version &> /dev/null; then
+        local compose_version=$(docker compose version | awk '{print $4}')
+        echo "✓ Docker Compose installed: $compose_version"
+    elif command -v docker-compose &> /dev/null; then
+        local compose_version=$(docker-compose --version | awk '{print $4}')
+        echo "✓ Docker Compose (legacy) installed: $compose_version"
+    else
+        missing+=("docker-compose")
+        echo "✗ Docker Compose is not installed"
+    fi
+
+    # Check dialog
+    if command -v dialog &> /dev/null; then
+        echo "✓ dialog installed"
+    else
+        missing+=("dialog")
+        echo "✗ dialog is not installed"
+    fi
+
+    echo ""
+
+    # Show installation instructions if missing
+    if [ ${#missing[@]} -gt 0 ]; then
+        echo "Missing required tools: ${missing[*]}"
+        echo ""
+        echo "Installation instructions:"
+        echo ""
+
+        for tool in "${missing[@]}"; do
+            case $tool in
+                go)
+                    echo "  Go:"
+                    echo "    Ubuntu/Debian: sudo apt-get install -y golang-go"
+                    echo "    macOS:         brew install go"
+                    echo "    Or download:   https://go.dev/dl/"
+                    echo ""
+                    ;;
+                docker)
+                    echo "  Docker:"
+                    echo "    Ubuntu:  sudo apt-get install -y docker.io"
+                    echo "    macOS:   Download Docker Desktop from https://docker.com"
+                    echo ""
+                    ;;
+                docker-compose)
+                    echo "  Docker Compose:"
+                    echo "    Ubuntu:  sudo apt-get install -y docker-compose-v2"
+                    echo "    macOS:   Included with Docker Desktop"
+                    echo ""
+                    ;;
+                dialog)
+                    echo "  dialog:"
+                    echo "    Ubuntu/Debian: sudo apt-get install -y dialog"
+                    echo "    macOS:         brew install dialog"
+                    echo "    Fedora/RHEL:   sudo dnf install dialog"
+                    echo ""
+                    ;;
+            esac
+        done
+
+        exit 1
+    fi
+
+    # Show warnings
+    if [ ${#warnings[@]} -gt 0 ]; then
+        echo "Warnings:"
+        for warning in "${warnings[@]}"; do
+            echo "  ⚠ $warning"
+        done
+        echo ""
+        read -p "Press Enter to continue or Ctrl+C to exit..."
+    fi
+
+    echo "All prerequisites satisfied!"
+    echo ""
+    sleep 1
+}
+
+# Run prerequisite checks
+check_prerequisites
+
 # Configuration variables (with defaults)
 NUM_PRODUCERS=3
 NUM_FULLNODES=1
